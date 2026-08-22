@@ -19,6 +19,7 @@ import sqlite3
 from datetime import datetime, timezone
 from pathlib import Path
 
+from ..audit.chain import GENESIS, canonical_json, compute_entry_hash, redact
 from .db import connect, init_db
 from .models import (
     ALLOWED_TRANSITIONS,
@@ -328,17 +329,33 @@ class Repository:
 
     # -- audit log: APPEND-ONLY by API shape --------------------------------------
 
-    def append_audit(self, case_id: str, step: str, payload_json: str) -> AuditLog:
-        """Insert an audit entry. No update or delete method exists on purpose."""
+    def append_audit(self, case_id: str, step: str, payload: dict) -> AuditLog:
+        """Insert a hash-chained audit entry (spec §19).
+
+        No update or delete method exists on purpose. The payload is redacted
+        (secrets never enter the trail) and canonicalized BEFORE hashing, so
+        stored bytes and hashed bytes are identical. Chain is per-case:
+        prev_hash = the case's previous entry_hash, or GENESIS."""
+        if not isinstance(payload, dict):
+            raise TypeError("audit payload must be a dict (canonicalized and "
+                            "hashed deterministically)")
+        payload_json = canonical_json(redact(payload))
         at = utc_now_iso()
         with self.conn:
+            row = self.conn.execute(
+                "SELECT entry_hash FROM audit_log WHERE case_id = ? "
+                "ORDER BY seq DESC LIMIT 1", (case_id,)).fetchone()
+            prev_hash = row["entry_hash"] if row and row["entry_hash"] else GENESIS
+            entry_hash = compute_entry_hash(prev_hash, case_id, step,
+                                            payload_json, at)
             cur = self.conn.execute(
-                "INSERT INTO audit_log (case_id, step, payload_json, at) "
-                "VALUES (?, ?, ?, ?)",
-                (case_id, step, payload_json, at))
+                "INSERT INTO audit_log (case_id, step, payload_json, at, "
+                "prev_hash, entry_hash) VALUES (?, ?, ?, ?, ?, ?)",
+                (case_id, step, payload_json, at, prev_hash, entry_hash))
             seq = cur.lastrowid
         return AuditLog(seq=seq, case_id=case_id, step=step,
-                        payload_json=payload_json, at=at)
+                        payload_json=payload_json, at=at,
+                        prev_hash=prev_hash, entry_hash=entry_hash)
 
     def read_audit(self, case_id: str) -> list[AuditLog]:
         cur = self.conn.execute(

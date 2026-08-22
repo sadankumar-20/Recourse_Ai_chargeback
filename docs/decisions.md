@@ -189,3 +189,38 @@ verbatim". "AI-only" would have believed both.
 (provider, model, prompt version+sha, attempt, latency, tokens, validation
 result). The orchestrator/audit stage will persist them; no secrets can enter
 records (tested).
+
+## ADR-009 — Execution lane and audit hash chain (Stage 7)
+
+**Adapter pattern with honest capabilities.** PaymentsAdapter is a small
+interface (lookups + contest + accept + status). SimulatorAdapter provides
+the full deterministic dispute lifecycle over the Stage-2 store, labels every
+response simulated, and supports controlled 503 injection. RazorpayTestAdapter
+does real test-mode HTTP for payment/refund lookups only; contest/accept
+raise NotSupported because Razorpay test mode cannot create synthetic
+disputes to contest — faking those responses would misrepresent the
+integration, so we don't (README carries the real-vs-simulated table).
+
+**One money action per dispute, ever.** idempotency_key = dispute_id, checked
+against the PERSISTED actions table (UNIQUE constraint as a second net, and
+the simulator refuses non-open disputes as a third). This deliberately makes
+a CONFLICTING second action (accept after contest) return the original too —
+the strongest single-submission invariant, provable from the audit trail
+(ACTION_SUBMITTED then ACTION_DUPLICATE with attempted vs original type).
+
+**Executor is the single writer.** tools/executor.py validates the action
+type (only contest/accept are executable — ESCALATE is a human task, not an
+API call), enforces idempotency, executes via the adapter, persists the
+ActionRecord, and audits every path: ACTION_SUBMITTED, ACTION_DUPLICATE,
+ACTION_FAILED (transient failures create NO action row and re-raise for the
+future orchestrator's retry loop). Adapters stay side-effect-minimal; the AI
+package still cannot import any of this (Stage-6 AST test).
+
+**Hash chain.** Per-case: entry_hash = SHA256(prev_hash | case_id | step |
+canonical_payload | at), genesis 64 zeros, canonical_json = sorted keys +
+compact separators. Redaction runs BEFORE hashing so stored bytes == hashed
+bytes and secrets never enter the trail. verify_audit_chain recomputes from
+genesis and reports the exact seq and reason on the first break; tamper tests
+cover modified payload, tampered prev/entry hash, deleted middle entry,
+reordered entries, and per-case isolation. The Stage-2 append-only API shape
+plus the chain means tampering requires raw SQL — and is detected anyway.

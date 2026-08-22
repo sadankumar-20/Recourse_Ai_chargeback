@@ -216,14 +216,17 @@ class TestIntegrityAndValidation(StoreTestBase):
 class TestAuditLogAppendOnly(StoreTestBase):
     def test_append_and_ordered_read(self):
         case = self.seed_case()
-        e1 = self.repo.append_audit(case.id, "intake", json.dumps({"ok": 1}))
-        e2 = self.repo.append_audit(case.id, "linking", json.dumps({"ok": 2}))
+        e1 = self.repo.append_audit(case.id, "intake", {"ok": 1})
+        e2 = self.repo.append_audit(case.id, "linking", {"ok": 2})
         entries = self.repo.read_audit(case.id)
         self.assertEqual([e.step for e in entries], ["intake", "linking"])
         self.assertLess(e1.seq, e2.seq)
-        # hash columns exist but stay unpopulated until the audit stage
-        self.assertIsNone(entries[0].prev_hash)
-        self.assertIsNone(entries[0].entry_hash)
+        # Stage 7 completed the deferred hash chain: first entry links to
+        # GENESIS, every entry carries its hash, entries link to each other
+        from app.audit.chain import GENESIS
+        self.assertEqual(entries[0].prev_hash, GENESIS)
+        self.assertEqual(len(entries[0].entry_hash), 64)
+        self.assertEqual(entries[1].prev_hash, entries[0].entry_hash)
 
     def test_repository_exposes_no_mutation_path_for_audit(self):
         audit_methods = [m for m in dir(self.repo)
@@ -236,7 +239,7 @@ class TestAuditLogAppendOnly(StoreTestBase):
 
     def test_audit_requires_existing_case(self):
         with self.assertRaises(sqlite3.IntegrityError):
-            self.repo.append_audit("ghost_case", "intake", "{}")
+            self.repo.append_audit("ghost_case", "intake", {})
 
 
 if __name__ == "__main__":

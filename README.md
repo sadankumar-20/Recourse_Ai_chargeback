@@ -28,8 +28,8 @@ Supporting: `store/` (SQLite repositories), `audit/` (append-only hash-chained l
 | Call | Real or mock |
 |---|---|
 | Anthropic LLM API | Real when `ANTHROPIC_API_KEY` set; deterministic stub in tests |
-| Razorpay payments/refunds fetch | Real test mode when configured |
-| Dispute contest/accept lifecycle | Labeled simulator (`SimulatorAdapter`) |
+| Razorpay payments/refunds fetch | Real test-mode HTTP (`RazorpayTestAdapter`) when credentials are configured |
+| Dispute contest/accept lifecycle | Labeled simulator (`SimulatorAdapter`) — Razorpay test mode cannot create synthetic disputes to contest, so the real adapter raises `NotSupported` instead of faking responses |
 | Shipping (Shiprocket-shaped) & email store | Mock over the synthetic dataset |
 
 Every adapter response records which implementation served it.
@@ -55,6 +55,15 @@ or `anthropic` with `ANTHROPIC_API_KEY` set (fails loudly if missing; never
 silently falls back). Model: `RECOURSE_LLM_MODEL` (default claude-sonnet-4-6).
 Live smoke test: `scripts/ai_smoke.py`. The test suite never touches the
 network.
+
+## Payments configuration
+
+`RECOURSE_PAYMENTS_ADAPTER=simulator` (default) or `razorpay_test` with
+`RAZORPAY_KEY_ID`/`RAZORPAY_KEY_SECRET` (fails loudly if missing). Every
+contest/accept is idempotent (`idempotency_key = dispute_id`: one money
+action per dispute, ever) and lands in a per-case SHA-256 audit hash chain —
+`verify_audit_chain(repo, case_id)` detects any modification, deletion, or
+reordering and reports exactly where the chain broke.
 
 ## Running
 
