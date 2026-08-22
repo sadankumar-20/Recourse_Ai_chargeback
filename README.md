@@ -51,6 +51,7 @@ held-out set is for final evaluation only, never for tuning).
 ## Running
 
 ```bash
+python3 -m pip install -r requirements.txt   # PyYAML (+ Flask for later stages)
 cd backend
 python -m unittest discover -s tests -v   # all tests, offline
 ```
