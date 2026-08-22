@@ -116,3 +116,32 @@ extractable key; the gate correctly rejected off-checklist keys (7 FAILs on
 dev data). Spec §8 step 6 defines extraction as checklist-driven, so the
 oracle now takes the reason code's checklist — the gate's off-checklist
 rejection stays, covered by an adversarial test.
+
+## ADR-007 — Decision engine (Stage 5)
+
+**Rule ladder, first match wins:** deadline_passed → amount_over_cap →
+deadline_kill_switch → precondition_failed → concede_hopeless →
+fight_ev_positive → needs_human. Each outcome records the exact rule fired,
+the full EV math, satisfied/missing required keys (with the gate's precise
+failure reasons attached), and both the thresholds version and playbook
+version — the audit stage persists all of it.
+
+**Concede only when there is nothing to fight with.** ACCEPT additionally
+requires that no shipment ever existed. If a shipment exists but proof is
+missing, the case escalates as *recoverable* — the merchant email can name
+exactly which document to fetch. Conceding recoverable cases would quietly
+donate money; fighting hopeless ones burns fees. This one boolean encodes the
+difference.
+
+**EV model, stated honestly:** EV(fight) = p_win × amount − fee (fee charged
+on every fight — conservative), EV(accept) = −amount, p_win from versioned
+playbook bands selected by completeness = satisfied required / required.
+Boundary behavior is unit-tested on both sides (₹270 escalates as
+uneconomical, ₹271 fights, at p_win 0.85 / fee ₹500).
+
+**On the 100% dev-split agreement (59/59 decided, 21 skipped visibly):** this
+is a CONSISTENCY check, not a performance claim — extraction was the
+deterministic oracle and the labels were derived from the same policy caps.
+Its value: any future regression in gate, playbook, or decision logic breaks
+a test loudly. Genuine disagreement becomes possible only when the LLM
+replaces the oracle; measuring that is precisely the eval stage's job.
