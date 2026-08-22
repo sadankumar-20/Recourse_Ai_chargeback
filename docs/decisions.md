@@ -224,3 +224,39 @@ genesis and reports the exact seq and reason on the first break; tamper tests
 cover modified payload, tampered prev/entry hash, deleted middle entry,
 reordered entries, and per-case isolation. The Stage-2 append-only API shape
 plus the chain means tampering requires raw SQL — and is detected anyway.
+
+## ADR-010 — Orchestrator (Stage 8)
+
+**Coordination only, enforced by test.** The orchestrator owns the state walk,
+deadline guards, the retry loop, duplicate-webhook idempotency, and escalation
+summaries — and nothing else. A boundary test asserts the module contains no
+EV formulas, caps, or completeness math; a dependency test asserts no lane
+(ai/policy/tools) imports the orchestrator.
+
+**One escalation exit.** Every failure mode — low AI confidence, LowConfidence
+after repair, gate rejections that sink the decision, unsupported reason
+codes, ambiguous links, exhausted retries, deadline danger — raises an
+internal _Escalate signal handled in exactly one place, which writes the
+merchant-facing summary (dispute, amount, hours, precise reason, missing/
+conflicting items, whether any money action already happened) and the
+CASE_ESCALATED audit entry with structured extras.
+
+**Retry semantics.** Exponential backoff (base × 2^(attempt−1), injectable
+sleep for tests), MAX 3 attempts, and the idempotency key is the dispute id
+on every attempt — a retry can never mint a second action, and the executor
+audits every failed attempt (ACTION_FAILED) plus the eventual submission or
+the escalation carrying the prepared bundle.
+
+**Deadline rules, deterministically.** After respond_by: hard block before
+any adapter call. Before DECIDE: T−24h force-escalates (belt and braces with
+the decision engine's own kill-switch). At ACT: an already-approved action
+may execute inside the last 24h but never past the deadline.
+
+**Terminal cases are never resumed.** Part 16's "ESCALATED → ACT invalid"
+and the Stage-2 model's escalated→acted transition are reconciled: the
+transition exists ONLY for a future explicit human-actor approval path; the
+orchestrator refuses terminal cases outright (RUN_REFUSED audited) — tested.
+
+**Duplicate webhooks.** Second delivery of the same dispute_id returns the
+existing case, audits WEBHOOK_DUPLICATE, and cannot restart the workflow or
+duplicate money (the actions-table idempotency is the last line anyway).

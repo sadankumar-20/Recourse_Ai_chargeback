@@ -34,6 +34,20 @@ Supporting: `store/` (SQLite repositories), `audit/` (append-only hash-chained l
 
 Every adapter response records which implementation served it.
 
+## End-to-end lifecycle
+
+`Orchestrator.process_event({"event": "dispute.created", "dispute_id": ...})`
+drives one case through the §8 machine: intake (duplicate webhooks
+idempotent) → deterministic-then-AI linking (confidence < 0.85 escalates,
+never guesses) → gather → AI extraction → Admissibility Gate (failed evidence
+preserved with exact reasons) → deterministic decision (full EV math
+persisted) → citation-validated draft (FIGHT only) → executor with
+exponential-backoff retries under one idempotency key → CLOSED, or ESCALATED
+with a merchant-ready summary. Every step lands in the per-case audit hash
+chain; `format_timeline(repo, case_id)` reconstructs the whole run from it.
+Deadlines are enforced deterministically: T−24h force-escalate before
+deciding, hard block on all money actions after respond_by.
+
 ## Dataset
 
 ```bash
