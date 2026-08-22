@@ -34,6 +34,20 @@ Supporting: `store/` (SQLite repositories), `audit/` (append-only hash-chained l
 
 Every adapter response records which implementation served it.
 
+## Dataset
+
+```bash
+python3 data/generate.py --seed 42
+```
+
+Generates a deterministic, deliberately messy world: 800 orders, 751
+shipments, 746 documents (PODs + Hinglish/English email threads), 120 disputes
+across 6 reason codes and 11 failure scenarios, a webhook feed with duplicate
+deliveries (`data/events.jsonl`), hidden eval labels
+(`data/ground_truth.json`, never stored in the app DB), and a frozen,
+stratified 80-dev / 40-held-out split (`data/split.json` — committed; the
+held-out set is for final evaluation only, never for tuning).
+
 ## Running
 
 ```bash

@@ -5,3 +5,8 @@ __pycache__/
 node_modules/
 dist/
 .coverage
+
+# generated dataset artifacts (reproducible via: python3 data/generate.py --seed 42)
+data/dataset.db
+data/ground_truth.json
+data/events.jsonl

@@ -51,3 +51,34 @@ with (a) a real Anthropic HTTP implementation used when `ANTHROPIC_API_KEY`
 is present, and (b) a deterministic `StubLLM` used in tests and offline demos.
 The orchestrator cannot tell them apart; every call is audited either way.
 This mirrors the payments `SimulatorAdapter` honesty rule in spec §11.
+
+## ADR-004 — Dataset ground truth lives outside the application database
+
+The eval labels (`gt_correct_action`, `gt_evidence_present`,
+`gt_outcome_if_fought`) are written to `data/ground_truth.json`, never into
+`dataset.db`. Hiding is structural: no repository method, API endpoint, or
+dashboard query can leak labels that are not in the database at all. A test
+(`test_ground_truth_not_in_app_database`) asserts no `gt_*` column or
+truth-named table ever appears in the app schema. Only the eval harness may
+read the JSON.
+
+Two related conventions, chosen to avoid changing the frozen §12 schema:
+- `documents` has no `order_id`; PODs link via `shipments.pod_doc_id`, and
+  email threads carry `source = "mailbox:<customer_email>"` — the same way a
+  real support mailbox is searched.
+- Duplicate dispute webhooks are a *delivery* phenomenon, not a storage one
+  (the PK forbids two identical dispute rows), so the generator emits
+  `data/events.jsonl` — the webhook feed the orchestrator will later consume —
+  in which duplicate-event disputes appear twice.
+
+## ADR-005 — Scenario-driven generation instead of post-hoc corruption
+
+Each dispute is generated from one of 11 named scenarios with fixed quotas
+matching spec §13 rates. Ground truth is *derived* from the scenario's facts
+using the same config caps the policy engine will use (amount > cap →
+ESCALATE, <24h → ESCALATE, hopeless ≤ auto-accept cap → ACCEPT, complete
+evidence → FIGHT), so evaluation later is principled rather than circular.
+The split is stratified per scenario so the 40 held-out disputes cover every
+failure mode. Bug found & fixed during this stage: the Hinglish marker list
+had drifted from the admission templates (15/20 counted); markers are now the
+single source of truth and validation asserts count == quota.
