@@ -95,6 +95,7 @@ CREATE TABLE IF NOT EXISTS cases (
 CREATE TABLE IF NOT EXISTS evidence (
     id            TEXT PRIMARY KEY,
     case_id       TEXT NOT NULL REFERENCES cases(id),
+    evidence_key  TEXT NOT NULL,
     claim         TEXT NOT NULL,
     source_doc_id TEXT NOT NULL REFERENCES documents(id),
     quoted_span   TEXT NOT NULL,

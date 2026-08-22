@@ -160,8 +160,16 @@ class Case:
 
 @dataclass
 class Evidence:
+    """One candidate (or admitted) piece of evidence.
+
+    ``evidence_key`` names the playbook checklist item this evidence claims to
+    satisfy (e.g. 'pod', 'awb', 'address_match') — added in Stage 4 because
+    the Admissibility Gate maps candidates to per-key rules and the dashboard
+    renders checklist coverage. Smallest necessary extension to §12.
+    """
     id: str
     case_id: str
+    evidence_key: str
     claim: str
     source_doc_id: str
     quoted_span: str

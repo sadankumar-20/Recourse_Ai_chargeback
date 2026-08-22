@@ -238,7 +238,8 @@ class Repository:
 
     def add_evidence(self, e: Evidence) -> None:
         self._insert("evidence", {
-            "id": e.id, "case_id": e.case_id, "claim": e.claim,
+            "id": e.id, "case_id": e.case_id, "evidence_key": e.evidence_key,
+            "claim": e.claim,
             "source_doc_id": e.source_doc_id, "quoted_span": e.quoted_span,
             "fields_json": e.fields_json,
             "gate_verdict": GateVerdict(e.gate_verdict).value if e.gate_verdict else None,

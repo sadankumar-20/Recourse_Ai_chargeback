@@ -80,7 +80,8 @@ class TestSchemaAndRoundTrips(StoreTestBase):
             ship_date="2026-08-03T08:00:00+00:00", status="delivered",
             pod_doc_id="doc_1"))
         self.repo.add_evidence(Evidence(
-            id="ev_1", case_id=case.id, claim="customer acknowledged delivery",
+            id="ev_1", case_id=case.id, evidence_key="admission_email",
+            claim="customer acknowledged delivery",
             source_doc_id="doc_1", quoted_span="parcel mil gaya",
             fields_json=json.dumps({"acknowledged": True})))
         self.repo.add_decision(Decision(
@@ -199,7 +200,8 @@ class TestIntegrityAndValidation(StoreTestBase):
         self.repo.add_document(Document(id="doc_1", case_id=case.id,
                                         type=DocumentType.POD, raw_text="pod",
                                         source="ship", fetched_at="t"))
-        self.repo.add_evidence(Evidence(id="ev_1", case_id=case.id, claim="c",
+        self.repo.add_evidence(Evidence(id="ev_1", case_id=case.id,
+                                        evidence_key="pod", claim="c",
                                         source_doc_id="doc_1", quoted_span="q",
                                         fields_json="{}"))
         with self.assertRaises(ValueError):

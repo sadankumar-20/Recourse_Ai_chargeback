@@ -1,0 +1,109 @@
+# Recourse policy playbooks — deterministic source of truth (spec §30.3).
+# NEVER expressed inside an LLM prompt. The Admissibility Gate maps each
+# evidence_key to machine-checkable rules; the future decision engine reads
+# required/optional keys and p_win bands. Version every change.
+#
+# Check semantics (implemented in policy/gate.py, zero LLM imports):
+#   doc_is_pod / doc_is_email  — source document type must match
+#   awb_matches_shipment       — claimed AWB appears verbatim in the source doc
+#                                AND equals the shipment-of-record AWB
+#   delivery_after_ship        — claimed delivered_at appears verbatim in the
+#                                doc AND is >= shipment ship_date >= order date
+#   pincode_matches_order      — claimed pincode appears verbatim in the doc
+#                                AND equals the order's delivery pincode
+#   otp_verified_yes           — the POD literally records OTP verified: YES
+#   sent_at_in_doc             — claimed message timestamp appears verbatim
+#   sent_after_ship            — a delivery acknowledgement cannot predate the
+#                                shipment leaving the warehouse
+
+version: v1
+
+defaults:
+  amount_tolerance_inr: 1   # |disputed - (order - refunds)| must be <= this
+
+reason_codes:
+
+  goods_not_received:
+    required:
+      - key: awb
+        description: Airway bill number proving a shipment exists
+        required_fields: [awb]
+        checks: [doc_is_pod, awb_matches_shipment]
+      - key: pod
+        description: Courier proof of delivery with a delivery timestamp
+        required_fields: [awb, delivered_at]
+        checks: [doc_is_pod, awb_matches_shipment, delivery_after_ship]
+      - key: address_match
+        description: POD delivery pincode equals the order's pincode
+        required_fields: [pincode]
+        checks: [doc_is_pod, pincode_matches_order]
+    optional:
+      - key: otp_verified
+        description: Courier verified delivery OTP at the door
+        required_fields: []
+        checks: [doc_is_pod, otp_verified_yes]
+      - key: admission_email
+        description: Customer's own message acknowledging receipt
+        required_fields: [sent_at]
+        checks: [doc_is_email, sent_at_in_doc, sent_after_ship]
+    p_win_bands:            # priors, versioned policy — not calibration claims
+      - min_completeness: 1.0
+        p_win: 0.85
+      - min_completeness: 0.75
+        p_win: 0.60
+      - min_completeness: 0.0
+        p_win: 0.10
+
+  not_as_described:
+    required:
+      - key: awb
+        description: Shipment exists and matches the order
+        required_fields: [awb]
+        checks: [doc_is_pod, awb_matches_shipment]
+      - key: pod
+        description: Item was delivered (condition disputes presume receipt)
+        required_fields: [awb, delivered_at]
+        checks: [doc_is_pod, awb_matches_shipment, delivery_after_ship]
+    optional:
+      - key: address_match
+        description: Delivered to the ordered address
+        required_fields: [pincode]
+        checks: [doc_is_pod, pincode_matches_order]
+      - key: admission_email
+        description: Customer acknowledges receipt while disputing condition
+        required_fields: [sent_at]
+        checks: [doc_is_email, sent_at_in_doc, sent_after_ship]
+    p_win_bands:
+      - min_completeness: 1.0
+        p_win: 0.75
+      - min_completeness: 0.5
+        p_win: 0.45
+      - min_completeness: 0.0
+        p_win: 0.10
+
+  duplicate:
+    required:
+      - key: awb
+        description: Exactly one fulfilment exists for the payment
+        required_fields: [awb]
+        checks: [doc_is_pod, awb_matches_shipment]
+      - key: pod
+        description: The single shipment was delivered once
+        required_fields: [awb, delivered_at]
+        checks: [doc_is_pod, awb_matches_shipment, delivery_after_ship]
+    optional:
+      - key: address_match
+        description: Delivered to the ordered address
+        required_fields: [pincode]
+        checks: [doc_is_pod, pincode_matches_order]
+      - key: otp_verified
+        description: OTP-verified single delivery
+        required_fields: []
+        checks: [doc_is_pod, otp_verified_yes]
+    p_win_bands:
+      - min_completeness: 1.0
+        p_win: 0.80
+      - min_completeness: 0.5
+        p_win: 0.40
+      - min_completeness: 0.0
+        p_win: 0.10
