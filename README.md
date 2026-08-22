@@ -79,6 +79,27 @@ action per dispute, ever) and lands in a per-case SHA-256 audit hash chain —
 `verify_audit_chain(repo, case_id)` detects any modification, deletion, or
 reordering and reports exactly where the chain broke.
 
+## Evaluation
+
+```bash
+python3 data/generate.py --seed 42     # build the frozen world
+python3 evals/run_eval.py --ablate-gate
+```
+
+Replays the 40 frozen held-out disputes (never used for tuning; the harness
+fails loudly on any split alteration) through the real orchestrator, ingests
+simulated outcomes, and writes `evals/metrics.json` + `evals/report.md`.
+Baselines: never-contest (net ₹0) and contest-everything (fights blind, fee
+on losses). The gate ablation (`--ablate-gate`) is analysis-only — it counts
+what inadmissible evidence would have shipped and which decisions would flip
+with the gate off; the production pipeline always keeps the gate on.
+Committed results (offline stub provider, seed 42): 75% decision agreement —
+every miss a documented coverage gap, zero wrong fights/accepts — 42.5%
+automation, 0 deadline violations, 40/40 audit chains valid, net ₹64,989
+recovered with ₹153,559 escalated pending human action. See
+`evals/report.md` for the full honest breakdown including where
+contest-everything beats us and why.
+
 ## Running
 
 ```bash

@@ -20,6 +20,17 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
+# Bump whenever the schema changes. Generated worlds carry this stamp in
+# PRAGMA user_version; opening a world built with a different schema raises a
+# clear, actionable error instead of a cryptic "no such column" later.
+# History: 1 = Stage 2 original; 2 = Stage 4 added evidence.evidence_key.
+SCHEMA_VERSION = 2
+
+
+class SchemaVersionError(RuntimeError):
+    pass
+
+
 SCHEMA = """
 PRAGMA foreign_keys = ON;
 
@@ -154,10 +165,20 @@ def connect(db_path: str | Path) -> sqlite3.Connection:
 
 
 def init_db(db_path: str | Path) -> None:
-    """Create the schema (idempotent)."""
+    """Create the schema (idempotent) and enforce the version stamp."""
     conn = connect(db_path)
     try:
+        has_tables = conn.execute(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type='table'"
+        ).fetchone()[0] > 0
+        version = conn.execute("PRAGMA user_version").fetchone()[0]
+        if has_tables and version != SCHEMA_VERSION:
+            raise SchemaVersionError(
+                f"database {db_path} was created with schema version "
+                f"{version}, but this code expects {SCHEMA_VERSION}. "
+                f"Regenerate the world: python3 data/generate.py --seed 42")
         conn.executescript(SCHEMA)
+        conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
         conn.commit()
     finally:
         conn.close()

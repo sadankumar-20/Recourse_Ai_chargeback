@@ -260,3 +260,43 @@ orchestrator refuses terminal cases outright (RUN_REFUSED audited) — tested.
 **Duplicate webhooks.** Second delivery of the same dispute_id returns the
 existing case, audits WEBHOOK_DUPLICATE, and cannot restart the workflow or
 duplicate money (the actions-table idempotency is the last line anyway).
+
+## ADR-011 — Evaluation methodology (Stage 9)
+
+**The evaluator replays the real system.** run_eval feeds the held-out
+events (duplicates included) through the actual Stage-8 Orchestrator against
+a COPY of the world; no parallel pipeline, no manual outcomes, no curation.
+Ground truth enters strictly after each case is terminal; a test asserts no
+lane and not the orchestrator can even reference the ground-truth file.
+
+**Frozen-set protection is code, not policy.** The harness fails loudly on
+size != 40, dev/held-out overlap, seed mismatch, split-union mismatch, or
+missing artifacts — silent regeneration is impossible.
+
+**Metadata separated from metrics.** metrics.json splits a non-deterministic
+meta block (timestamps, wall time, provider) from deterministic metrics/
+cases blocks; the reproducibility test compares the deterministic blocks of
+two full runs for equality.
+
+**Honest economics, honest surprise.** Fee (Rs.500) charged on lost contests,
+as configured. First run surfaced that contest-everything nets MORE on this
+synthetic set (Rs.137,556 vs Rs.64,989). Diagnosis (not tuning): all 10
+decision disagreements and the net gap trace to the 3 deferred reason codes
+— Recourse escalates Rs.153,559 to humans (Rs.45,969 gt-winnable) rather
+than fighting without a playbook, while the blind baseline fights and (in
+simulation) mostly wins. Reported head-on with the actionable reading:
+extend playbook coverage; the pending-winnable number quantifies exactly how
+much that is worth. Escalation precision is reported STRICTLY (coverage-gap
+escalations counted against it).
+
+**Ablation is analysis, never pipeline surgery.** --ablate-gate recomputes
+decisions with all candidates treated as admitted; the production gate is
+untouched. On held-out data with the faithful stub it catches the planted
+pincode-mismatch case flipping ESCALATE->FIGHT; the fabrication-blocking
+value is demonstrated by the Stage-6 adversarial ablation tests.
+
+**Found & fixed during the stage:** schema drift between code and the
+committed generated world (Stage-3 dataset.db predated Stage-4's
+evidence_key column; CREATE IF NOT EXISTS never migrates). Fix is
+structural: PRAGMA user_version stamping with SchemaVersionError carrying
+regeneration instructions — stale worlds now fail clearly, not cryptically.

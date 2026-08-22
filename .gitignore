@@ -10,3 +10,4 @@ dist/
 data/dataset.db
 data/ground_truth.json
 data/events.jsonl
+evals/eval_world.db
