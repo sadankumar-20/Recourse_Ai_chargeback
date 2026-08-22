@@ -145,3 +145,47 @@ deterministic oracle and the labels were derived from the same policy caps.
 Its value: any future regression in gate, playbook, or decision logic breaks
 a test loudly. Genuine disagreement becomes possible only when the LLM
 replaces the oracle; measuring that is precisely the eval stage's job.
+
+## ADR-008 — AI layer design (Stage 6)
+
+**AI only at the ambiguity boundary.** Three narrow functions — link (rank
+candidates when exact matching fails), extract (messy docs → candidate
+evidence), draft (admitted evidence → cited narrative). Each has one focused,
+versioned prompt (ai/prompts/*.md, version + sha256 recorded per call). The
+AI never decides FIGHT/ACCEPT/ESCALATE, never reads the DB, never touches
+execution — the last two are AST-test-enforced (no app.tools / app.store.repo
+/ sqlite3 imports in the ai package).
+
+**Every LLM response is untrusted input.** Hand-rolled strict validators
+(ADR-001): parse → validate → on failure exactly ONE repair retry carrying
+the validator's exact error → still invalid raises LowConfidence with the
+full call records. No silent coercion, no silent defaults. Link proposals
+cannot name an order outside the candidate set; extraction cannot cite an
+unprovided document or skip a required field; drafts answer to the
+deterministic policy/citations validator with no bypass.
+
+**Two providers, loud selection.** AnthropicClient (env-keyed, never logged)
+and a FAITHFUL deterministic StubAIClient so the whole pipeline runs and is
+tested offline; ScriptedAIClient injects adversarial outputs in tests.
+Requesting "anthropic" without a key raises AIConfigError — the system never
+silently downgrades to the stub.
+
+**Two defense layers, demonstrated by ablation tests:** a fabrication citing
+a nonexistent document dies at schema validation; a schema-valid fabrication
+(real doc id, invented quote) dies at the Admissibility Gate with "not found
+verbatim". "AI-only" would have believed both.
+
+**Bugs found and fixed during the stage:**
+1. The citation validator's sentence splitter broke drafts at periods INSIDE
+   quoted evidence (Hinglish spans like "...chhota hai. refund kar do"),
+   causing false uncited-fact violations and spurious LowConfidence. The
+   splitter is now quote-aware; regression test added.
+2. The first ablation test targeted a documentless case, where fabrication is
+   blocked at schema (no valid doc id exists) before reaching the gate — the
+   test's premise was wrong, not the code. Rewritten as two tests showing
+   both defense layers explicitly.
+
+**Observability (minimal on purpose):** every call yields an AICallRecord
+(provider, model, prompt version+sha, attempt, latency, tokens, validation
+result). The orchestrator/audit stage will persist them; no secrets can enter
+records (tested).

@@ -48,6 +48,14 @@ deliveries (`data/events.jsonl`), hidden eval labels
 stratified 80-dev / 40-held-out split (`data/split.json` — committed; the
 held-out set is for final evaluation only, never for tuning).
 
+## AI configuration
+
+`RECOURSE_AI_PROVIDER=stub` (default — deterministic, offline, no key needed)
+or `anthropic` with `ANTHROPIC_API_KEY` set (fails loudly if missing; never
+silently falls back). Model: `RECOURSE_LLM_MODEL` (default claude-sonnet-4-6).
+Live smoke test: `scripts/ai_smoke.py`. The test suite never touches the
+network.
+
 ## Running
 
 ```bash

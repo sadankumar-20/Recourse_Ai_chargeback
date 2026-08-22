@@ -29,8 +29,13 @@ API_FAILURE_ESCALATE_HOURS = 12      # T-12h: still-failing submission -> human
 MAX_SUBMIT_RETRIES = 3
 
 # --- LLM -------------------------------------------------------------------
+# Provider: "stub" (deterministic, offline — default so tests and local dev
+# never touch the network) or "anthropic" (real API; fails loudly without a
+# key — never silently falls back to the stub).
+AI_PROVIDER = os.environ.get("RECOURSE_AI_PROVIDER", "stub")
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 LLM_MODEL = os.environ.get("RECOURSE_LLM_MODEL", "claude-sonnet-4-6")
+AI_MAX_TOKENS = 2000
 
 # --- Adapters ---------------------------------------------------------------
 # "simulator" (labeled mock, full dispute lifecycle) | "razorpay_test"
