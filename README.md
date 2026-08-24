@@ -100,10 +100,26 @@ recovered with ₹153,559 escalated pending human action. See
 `evals/report.md` for the full honest breakdown including where
 contest-everything beats us and why.
 
+## Dashboard & demo
+
+```bash
+python3 data/generate.py --seed 42     # build the world
+python3 scripts/demo_seed.py           # run curated cases into demo.db
+python3 scripts/serve.py               # http://127.0.0.1:8000
+```
+
+Case queue with deadline urgency, docket-style case files (evidence exhibits
+with live deterministic check panels, decision math, citation-locked drafts
+where clicking [E3] flashes the exhibit), tamper-evident audit timelines, a
+human review panel (approve fight / accept / reject — all server-validated,
+idempotent, executed through the same executor as the agent), and the
+held-out evaluation view including exactly where the system stops and what
+that coverage costs.
+
 ## Running
 
 ```bash
-python3 -m pip install -r requirements.txt   # PyYAML (+ Flask for later stages)
+python3 -m pip install -r requirements.txt   # PyYAML + Flask
 cd backend
 python -m unittest discover -s tests -v   # all tests, offline
 ```

@@ -300,3 +300,39 @@ committed generated world (Stage-3 dataset.db predated Stage-4's
 evidence_key column; CREATE IF NOT EXISTS never migrates). Fix is
 structural: PRAGMA user_version stamping with SchemaVersionError carrying
 regeneration instructions — stale worlds now fail clearly, not cryptically.
+
+## ADR-012 — API and dashboard (Stage 10)
+
+**The API is a boundary, not a brain.** Flask routes read the store, replay
+the deterministic gate for live check panels (the gate is pure, so
+re-verification is free and honest — the UI shows live results, not stored
+screenshots), and execute human decisions ONLY through the Stage-7 executor.
+A test asserts the API never calls adapter action methods directly.
+
+**Human approval = the reserved transition, exercised.** POST /approve
+validates server-side (escalated-only, deadline not passed, FIGHT requires
+gate-admitted evidence, attributable actor required), audits HUMAN_APPROVED,
+executes with actor=HUMAN under the SAME idempotency key as the agent, and
+walks ESCALATED->ACTED->CLOSED. POST /reject closes with zero money actions.
+The frontend only shows buttons the backend reports as allowed — and the
+backend re-checks everything anyway (a crafted request cannot bypass the
+deadline or evidence rules; tested).
+
+**Frontend without a build step.** npm has no network in this environment,
+so the dashboard is a dependency-free static SPA (vanilla JS + CSS) served
+by Flask — an honest constraint turned into a feature: zero supply chain,
+instant load, one file each. Design per the frontend-design pass: ledger-
+paper docket aesthetic, serif docket headers, monospace for everything
+evidentiary, and the signature element — evidence exhibit cards with verdict
+stamps, verbatim quotes, live check ledgers, and clickable [E#] citations
+that flash the exhibit (the page's single animation; reduced-motion
+respected). Every number on screen comes from the API; the UI computes
+nothing.
+
+**Demo clock honesty.** The synthetic world is frozen at sim_now; the API
+pins its clock there when a data dir is supplied and says so in /health —
+deadline countdowns in the demo are real relative to the world, not faked.
+
+**Coverage gaps as a first-class screen.** The metrics view renders the
+Stage-9 finding head-on: where contest-everything beats us, why (deferred
+reason codes), and the exact winnable amount waiting on playbook coverage.
