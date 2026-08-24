@@ -23,10 +23,22 @@ class ReasonCode(StrEnum):
     CANCELLED_RECURRING = "cancelled_recurring"
 
 
+class Provenance(StrEnum):
+    """Where a fact came from (R1). Every document and dispute carries one;
+    the UI badges it; tool results propagate it."""
+    SIMULATOR = "simulator"
+    USER_UPLOAD = "user_upload"
+    USER_SUBMITTED = "user_submitted"
+    RAZORPAY_TEST = "razorpay_test"
+    TRACKING_API = "tracking_api"
+    VISION_TRANSCRIBED = "vision_transcribed"
+
+
 class CaseState(StrEnum):
     INTAKE = "intake"
     LINKING = "linking"
     GATHERING = "gathering"
+    NEEDS_INPUT = "needs_input"
     GATED = "gated"
     DECIDED = "decided"
     ACTED = "acted"
@@ -40,7 +52,9 @@ class CaseState(StrEnum):
 ALLOWED_TRANSITIONS: dict[CaseState, set[CaseState]] = {
     CaseState.INTAKE: {CaseState.LINKING, CaseState.ESCALATED},
     CaseState.LINKING: {CaseState.GATHERING, CaseState.ESCALATED},
-    CaseState.GATHERING: {CaseState.GATED, CaseState.ESCALATED},
+    CaseState.GATHERING: {CaseState.GATED, CaseState.NEEDS_INPUT,
+                          CaseState.ESCALATED},
+    CaseState.NEEDS_INPUT: {CaseState.GATHERING, CaseState.ESCALATED},
     CaseState.GATED: {CaseState.DECIDED, CaseState.ESCALATED},
     CaseState.DECIDED: {CaseState.ACTED, CaseState.ESCALATED},
     CaseState.ACTED: {CaseState.CLOSED},
@@ -137,6 +151,7 @@ class Document:
     raw_text: str
     source: str
     fetched_at: str
+    provenance: str = Provenance.SIMULATOR.value
 
 
 @dataclass
@@ -147,6 +162,7 @@ class Dispute:
     reason_code: ReasonCode
     respond_by: str
     status: DisputeStatus = DisputeStatus.OPEN
+    provenance: str = Provenance.SIMULATOR.value
 
 
 @dataclass

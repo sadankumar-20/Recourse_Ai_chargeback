@@ -22,6 +22,7 @@ from pathlib import Path
 from ..audit.chain import GENESIS, canonical_json, compute_entry_hash, redact
 from .db import connect, init_db
 from .models import (
+    Provenance,
     ALLOWED_TRANSITIONS,
     ActionRecord,
     Actor,
@@ -136,6 +137,7 @@ class Repository:
         self._insert("documents", {
             "id": d.id, "case_id": d.case_id, "type": DocumentType(d.type).value,
             "raw_text": d.raw_text, "source": d.source, "fetched_at": d.fetched_at,
+            "provenance": Provenance(d.provenance).value,
         })
 
     def get_document(self, doc_id: str) -> Document | None:
@@ -164,6 +166,7 @@ class Repository:
             "reason_code": ReasonCode(dp.reason_code).value,
             "respond_by": dp.respond_by,
             "status": DisputeStatus(dp.status).value,
+            "provenance": Provenance(dp.provenance).value,
         })
 
     def get_dispute(self, dispute_id: str) -> Dispute | None:

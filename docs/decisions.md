@@ -336,3 +336,42 @@ deadline countdowns in the demo are real relative to the world, not faked.
 **Coverage gaps as a first-class screen.** The metrics view renders the
 Stage-9 finding head-on: where contest-everything beats us, why (deferred
 reason codes), and the exact winnable amount waiting on playbook coverage.
+
+## ADR-013 — Provenance and the read-only tool registry (R1)
+
+**Context: the GenAI transformation.** Stages 1–10 built a safe conveyor
+belt; R1–R8 turn it into an investigator you can hand a real dispute. R1 is
+the foundation: where facts come from, and what hands the future agent gets.
+
+**Provenance is schema, not annotation.** documents.provenance and
+disputes.provenance (schema v3, CHECK-constrained vocabulary: simulator,
+user_upload, user_submitted, razorpay_test, tracking_api,
+vision_transcribed) so every fact's origin survives storage, tool reads,
+audit entries, and UI badges. The needs_input case state ships in the same
+schema bump (states live in a CHECK constraint; one migration instead of
+two), with transitions gathering ⇄ needs_input and needs_input → escalated
+— unused until R4, tested now.
+
+**Read-only by construction, not by convention.** Tools never see the
+Repository: they receive a whitelist proxy (ReadOnlyRepo) exposing only
+lookup methods; every write surface — add_*, update_*, set_*, append_audit,
+even .conn — raises ToolAccessDenied, and the SQL helper refuses non-SELECT.
+The registry module contains no reference to the executor or adapters
+(test-scanned), and the AI lane still cannot import app.tools at all
+(Stage-6 AST test covers the new module automatically). The investigator
+(R2) will emit tool *requests* as data; only the orchestrator executes them.
+
+**Every call is evidence.** Each execution appends TOOL_CALL to the case's
+hash chain: tool, validated args, ok/error, provenance of what was read,
+truncated result summary, budget used/of. Budget (default 12) raises
+ToolBudgetExceeded — a wandering agent is structurally impossible.
+
+**Structured failure over exceptions.** Unknown tools, bad arguments, and
+missing entities return machine-readable error results the agent can adapt
+to; only budget exhaustion and write attempts raise.
+
+**Found during the stage:** two field-name guesses (orders.shipped_at,
+Shipment.dispatched_at) written before reading the actual schema/model —
+caught immediately by the happy-path test. The fix is the real field names;
+the lesson (inspect before writing against a schema) is recorded here
+against recurrence.

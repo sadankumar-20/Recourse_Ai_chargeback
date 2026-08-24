@@ -23,8 +23,10 @@ from pathlib import Path
 # Bump whenever the schema changes. Generated worlds carry this stamp in
 # PRAGMA user_version; opening a world built with a different schema raises a
 # clear, actionable error instead of a cryptic "no such column" later.
-# History: 1 = Stage 2 original; 2 = Stage 4 added evidence.evidence_key.
-SCHEMA_VERSION = 2
+# History: 1 = Stage 2 original; 2 = Stage 4 added evidence.evidence_key;
+# 3 = R1 added documents.provenance, disputes.provenance, and the
+#     'needs_input' case state (interactive gap resolution).
+SCHEMA_VERSION = 3
 
 
 class SchemaVersionError(RuntimeError):
@@ -66,7 +68,10 @@ CREATE TABLE IF NOT EXISTS documents (
     type       TEXT NOT NULL CHECK (type IN ('email','pod','invoice','log')),
     raw_text   TEXT NOT NULL,
     source     TEXT NOT NULL,
-    fetched_at TEXT NOT NULL
+    fetched_at TEXT NOT NULL,
+    provenance TEXT NOT NULL DEFAULT 'simulator' CHECK (provenance IN
+        ('simulator','user_upload','razorpay_test','tracking_api',
+         'vision_transcribed'))
 );
 
 CREATE TABLE IF NOT EXISTS shipments (
@@ -88,6 +93,8 @@ CREATE TABLE IF NOT EXISTS disputes (
         ('goods_not_received','not_as_described','duplicate',
          'fraud','credit_not_processed','cancelled_recurring')),
     respond_by  TEXT NOT NULL,
+    provenance  TEXT NOT NULL DEFAULT 'simulator' CHECK (provenance IN
+        ('simulator','user_submitted','razorpay_test')),
     status      TEXT NOT NULL DEFAULT 'open' CHECK (status IN
         ('open','under_review','won','lost','accepted','expired'))
 );
@@ -96,7 +103,7 @@ CREATE TABLE IF NOT EXISTS cases (
     id              TEXT PRIMARY KEY,
     dispute_id      TEXT NOT NULL UNIQUE REFERENCES disputes(id),
     state           TEXT NOT NULL DEFAULT 'intake' CHECK (state IN
-        ('intake','linking','gathering','gated','decided',
+        ('intake','linking','gathering','needs_input','gated','decided',
          'acted','closed','escalated')),
     linked_order_id TEXT REFERENCES orders(id),
     link_confidence REAL CHECK (link_confidence IS NULL
