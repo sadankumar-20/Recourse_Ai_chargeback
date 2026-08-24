@@ -1,0 +1,10 @@
+backend/tests
+**/__pycache__
+docs
+*.zip
+recourse.db
+demo.db
+data/dataset.db
+data/ground_truth.json
+data/events.jsonl
+evals/eval_world.db
