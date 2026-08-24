@@ -1,0 +1,40 @@
+{
+ "note": "dev split only; held-out frozen for eval v2. Missing_pod v1 outcome labels encode the fixed pipeline's capability assumption, so recovered cases are counted as investigation capability, not as realized rupees.",
+ "fixed": {
+  "mode": "fixed",
+  "cases": 80,
+  "closed": 43,
+  "escalated": 37,
+  "needs_input_asks": 0,
+  "recovered_missing_pod_cases": 0,
+  "tool_calls_total": 0,
+  "tool_calls_max": 0,
+  "invalid_tool_requests": 0,
+  "budget_violations": 0,
+  "deadline_violations": 0,
+  "chains_invalid": 0,
+  "evidence_admitted_total": 183,
+  "tool_calls_avg": 0.0
+ },
+ "agentic": {
+  "mode": "agentic",
+  "cases": 80,
+  "closed": 54,
+  "escalated": 26,
+  "needs_input_asks": 0,
+  "recovered_missing_pod_cases": 11,
+  "tool_calls_total": 248,
+  "tool_calls_max": 5,
+  "invalid_tool_requests": 0,
+  "budget_violations": 0,
+  "deadline_violations": 0,
+  "chains_invalid": 0,
+  "evidence_admitted_total": 216,
+  "tool_calls_avg": 3.1
+ },
+ "delta": {
+  "escalations": -11,
+  "missing_pod_recovered": 11,
+  "evidence_admitted": 33
+ }
+}

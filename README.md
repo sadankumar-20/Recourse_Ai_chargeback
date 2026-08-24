@@ -55,6 +55,18 @@ shows what gate-off would have shipped; adversarial tests show fabricated
 quotes dying at the gate and fabricated documents dying even earlier, at
 schema validation.
 
+## Investigation modes (R2)
+
+`RECOURSE_INVESTIGATION=fixed` (default) runs the Stage-8 predefined gather
+path; `agentic` runs a bounded planner-and-tools loop: the model (or the
+deterministic offline planner) decides what to check next via read-only,
+budget-metered, audited tools, notices gaps (e.g. a missing POD), and can
+query the courier's own tracking record to recover them. Both modes feed the
+same unchanged extraction, Admissibility Gate, and decision engine. Dev-split
+A/B (`evals/agentic_ab.json`): 11 missing-POD cases recovered, +33 admitted
+evidence items, 3.1 avg tool calls, zero invalid requests or violations —
+with the frozen held-out eval proven byte-identical.
+
 ## Held-out results (frozen 40 disputes, never tuned on, offline stub)
 
 | metric | result |

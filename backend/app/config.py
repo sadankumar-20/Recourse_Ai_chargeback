@@ -33,6 +33,12 @@ MAX_SUBMIT_RETRIES = 3
 # never touch the network) or "anthropic" (real API; fails loudly without a
 # key — never silently falls back to the stub).
 AI_PROVIDER = os.environ.get("RECOURSE_AI_PROVIDER", "stub")
+
+# R2: "fixed" = the Stage-8 predefined gather path; "agentic" = the bounded
+# investigation loop (planner + read-only tools). Both feed the SAME
+# extraction, gate, and decision engine. Default stays fixed until the A/B
+# and eval v2 justify flipping it.
+INVESTIGATION_MODE = os.environ.get("RECOURSE_INVESTIGATION", "fixed")
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 LLM_MODEL = os.environ.get("RECOURSE_LLM_MODEL", "claude-sonnet-4-6")
 AI_MAX_TOKENS = 2000

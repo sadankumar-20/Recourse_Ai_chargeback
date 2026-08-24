@@ -172,6 +172,35 @@ def _read_document(ro: ReadOnlyRepo, a: dict):
             "raw_text": d.raw_text}, [d.provenance]
 
 
+def _fetch_tracking(ro: ReadOnlyRepo, a: dict):
+    """Simulated courier tracking system (provenance: simulator; the real
+    HTTP adapter arrives in R5). Deterministically reconstructs the courier's
+    own delivery record from world state: if the shipment reached
+    'delivered', the courier knows it — even when the merchant lost the POD
+    file. Read-only: materializing the confirmation as a document is the
+    coordination layer's job, never a tool's."""
+    rows = ro.select(
+        "SELECT s.awb, s.courier, s.ship_date, s.status, o.address, "
+        "o.customer_email FROM shipments s JOIN orders o ON o.id = s.order_id "
+        "WHERE s.awb = ?", (a["awb"],))
+    if not rows:
+        return {"error": f"courier has no record of AWB {a['awb']!r}"}, []
+    s = rows[0]
+    if s["status"] != "delivered":
+        return {"awb": s["awb"], "courier": s["courier"],
+                "status": s["status"],
+                "note": "no delivery confirmation available"},                [Provenance.SIMULATOR.value]
+    from datetime import datetime, timedelta
+    delivered_at = (datetime.fromisoformat(s["ship_date"])
+                    + timedelta(hours=72)).isoformat(timespec="seconds")
+    return {"awb": s["awb"], "courier": s["courier"], "status": "delivered",
+            "ship_date": s["ship_date"], "delivered_at": delivered_at,
+            "receiver": "".join(c for c in s["customer_email"].split("@")[0]
+                                if not c.isdigit()).replace(".", " ").title(),
+            "address": s["address"],
+            "confirmation": "courier tracking shows successful delivery"},            [Provenance.SIMULATOR.value]
+
+
 TOOLS: dict[str, ToolSpec] = {t.name: t for t in (
     ToolSpec("search_orders",
              "Find candidate orders by payment_id, amount, or customer email.",
@@ -191,6 +220,10 @@ TOOLS: dict[str, ToolSpec] = {t.name: t for t in (
              {"customer_email": {"type": str, "required": True}}, _search_inbox),
     ToolSpec("read_document", "Read a document's full text and provenance.",
              {"doc_id": {"type": str, "required": True}}, _read_document),
+    ToolSpec("fetch_tracking",
+             "Query the courier's tracking system by AWB — useful when the "
+             "merchant's own POD document is missing.",
+             {"awb": {"type": str, "required": True}}, _fetch_tracking),
 )}
 
 

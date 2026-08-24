@@ -27,6 +27,7 @@ from .ai.draft_representment import draft_representment
 from .ai.errors import LowConfidence
 from .ai.extract_evidence import extract_evidence
 from .ai.link_order import link_order
+from .investigation import run_investigation
 from .policy.decide import DecisionOutcome, decide
 from .policy.gate import GateContext, admit_all, case_preconditions
 from .policy.playbooks import PlaybookError, PlaybookSet, load_playbooks
@@ -58,7 +59,8 @@ class Orchestrator:
     def __init__(self, repo: Repository, adapter: PaymentsAdapter,
                  ai_client=None, playbooks: PlaybookSet | None = None,
                  now: datetime | None = None, sleep=time.sleep,
-                 backoff_base_s: float = 1.0):
+                 backoff_base_s: float = 1.0,
+                 investigation_mode: str | None = None):
         self.repo = repo
         self.adapter = adapter
         self.ai = ai_client or get_client()
@@ -66,6 +68,8 @@ class Orchestrator:
         self._now = now                      # fixed clock for tests/eval
         self.sleep = sleep
         self.backoff_base_s = backoff_base_s
+        self.investigation_mode = (investigation_mode
+                                   or config.INVESTIGATION_MODE)
 
     # -- clock / deadline helpers ---------------------------------------------------
 
@@ -165,7 +169,22 @@ class Orchestrator:
         # GATHER ----------------------------------------------------------------
         self._deadline_guard(dispute, acting=False)
         case = self.repo.update_case_state(case.id, CaseState.GATHERING)
-        docs = self._gather(case, order)
+        if self.investigation_mode == "agentic":
+            outcome = run_investigation(self.repo, case, dispute, order,
+                                        playbook, self.ai)
+            if outcome.termination == "NEEDS_INPUT":
+                # R4 activates the interactive needs_input pause; until then
+                # the structured request escalates to a human.
+                raise _Escalate(
+                    "investigation needs merchant input: "
+                    + (outcome.request_to_user or "additional evidence"),
+                    details=[f"missing required '{m}'"
+                             for m in outcome.missing],
+                    extra={"agent_request": outcome.request_to_user,
+                           "termination": outcome.termination})
+            docs = outcome.documents
+        else:
+            docs = self._gather(case, order)
 
         # EXTRACT + GATE --------------------------------------------------------
         self._deadline_guard(dispute, acting=False)

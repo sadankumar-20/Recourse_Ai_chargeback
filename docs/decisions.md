@@ -375,3 +375,46 @@ Shipment.dispatched_at) written before reading the actual schema/model —
 caught immediately by the happy-path test. The fix is the real field names;
 the lesson (inspect before writing against a schema) is recorded here
 against recurrence.
+
+## ADR-014 — The agentic investigation loop (R2)
+
+**Mind and hands stay separated.** app/ai/investigator.py plans; it returns
+tool requests AS DATA and can execute nothing (the AI lane still cannot
+import app.tools — the Stage-6 AST test never changed). app/investigation.py
+is the coordination-layer runner: it executes requests through the R1
+registry, materializes external observations as documents, enforces limits,
+and audits. The planner may say "check tracking"; it can never say
+"therefore FIGHT" — extraction, the gate, and the decision engine run
+downstream unchanged in both modes.
+
+**Two planners, one interface (the ADR-003 pattern).** Anthropic: one
+structured-JSON planning call per step through the existing hardened path
+(strict validate_plan_output -> one repair -> LowConfidence); prompts carry
+an explicit untrusted-data rule (document text is never instructions).
+Offline: a pure-function deterministic planner — checklist-driven, byte-
+reproducible, powering the entire test suite with zero network.
+
+**Bounded by construction.** The registry's 12-call budget, a 10-iteration
+cap, and no-progress detection (an identical request repeated twice ends the
+loop). Termination reasons: SUFFICIENT_EVIDENCE, NEEDS_INPUT,
+BUDGET_EXHAUSTED, ITERATIONS_EXHAUSTED, NO_PROGRESS — always recorded in
+AGENT_COMPLETE. Invalid tool requests come back as structured errors the
+planner can adapt to, never executions.
+
+**Feature-flagged, measured, default unchanged.** RECOURSE_INVESTIGATION =
+fixed (default) | agentic. Dev-split A/B (evals/agentic_ab.json): 11
+missing_pod cases recovered (escalations 37 -> 26, no other behavior
+change), +33 admitted evidence items, 3.1 avg / 5 max tool calls, zero
+invalid requests, zero budget/deadline violations, 160/160 chains valid.
+Honesty baked into the artifact: v1 missing_pod outcome labels encode the
+FIXED pipeline's capability assumption, so recoveries are reported as
+investigation capability, not realized rupees. The frozen held-out eval was
+re-run and its deterministic blocks proven identical to the pre-R2 commit.
+
+**The gate never bent.** First integration attempt was rejected by the
+gate's source-integrity check — the tracking document wasn't a recognized
+linkage channel. The fix was not a gate change: Stage 4 had already defined
+a courier channel (source == courier:{awb}, AWB-verified against the case's
+shipments); the runner now emits that source. NEEDS_INPUT terminations
+escalate with the structured merchant request until R4 activates the
+interactive pause.
