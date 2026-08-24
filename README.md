@@ -1,134 +1,127 @@
-# Recourse — AI Chargeback Defense Agent
+# Recourse — an AI chargeback defense agent
 
-An agent that turns a merchant's scattered order, delivery, and email records into a
-deadline-safe, evidence-verified chargeback defense — fighting the disputes worth
-fighting, safely conceding the ones that aren't, and structurally unable to cite
-evidence it cannot prove exists.
+**The AI can recommend. The policy engine can verify. Only the execution
+layer can move money — and every step lands in a tamper-evident audit
+chain.**
 
-Built for the Razorpay Student AI Builder Program. Single source of truth:
-[`recourse_spec.md`](../recourse_spec.md) (§8 workflow, §12 data model, §30 build spec).
+When a customer files a chargeback, an Indian SMB merchant has 4–7 days to
+assemble courier proof, order records, and email evidence — or lose by
+default. Recourse turns those scattered, messy records (including Hinglish
+email threads) into a deadline-safe, evidence-verified defense: it fights
+the disputes worth fighting, concedes the hopeless ones for less than the
+fee, and escalates to a human with a summary naming exactly what's missing
+and the hours remaining.
 
-## Architecture (three-lane separation)
+Built stage-by-stage for the Razorpay Student AI Builder Program; the git
+history is the engineering story. Full design record: `docs/decisions.md`
+(ADR-001…012) · [`ARCHITECTURE.md`](ARCHITECTURE.md) ·
+[`docs/DEMO.md`](docs/DEMO.md).
 
+## Quickstart
+
+```bash
+python3 -m pip install -r requirements.txt        # PyYAML + Flask
+python3 data/generate.py --seed 42                # deterministic messy world
+cd backend && python3 -m unittest discover -s tests && cd ..   # 207 tests, offline
+python3 evals/run_eval.py --ablate-gate           # frozen held-out evaluation
+python3 scripts/demo_seed.py && python3 scripts/serve.py       # dashboard :8000
 ```
-AI lane        backend/app/ai/       LLM reasoning only: link, extract, draft.
-                                     Output is UNTRUSTED until validated.
-Policy lane    backend/app/policy/   Deterministic: playbooks, Admissibility Gate,
-                                     decision math, citation validator. No LLM imports.
-Execution lane backend/app/tools/    Payments adapter (Razorpay test mode | labeled
-                                     simulator), shipping mock, mail store.
-                                     Only the orchestrator may act, post-policy.
-```
 
-Supporting: `store/` (SQLite repositories), `audit/` (append-only hash-chained log),
-`evals/` (held-out evaluation harness), `frontend/` (dashboard).
+Zero network required: the LLM defaults to a faithful deterministic stub and
+payments to a labeled simulator. For the real model:
+`RECOURSE_AI_PROVIDER=anthropic ANTHROPIC_API_KEY=…` (fails loudly if
+unkeyed — never a silent fallback).
 
-## Honest integration table
+## What the agent does (spec §8, end to end)
 
-| Call | Real or mock |
+webhook intake (duplicate deliveries idempotent) → deterministic-then-AI
+order linking (confidence < 0.85 escalates; the system never guesses) →
+document gathering → AI evidence extraction (verbatim quotes, untranslated)
+→ **the Admissibility Gate** → deterministic FIGHT/ACCEPT/ESCALATE with full
+EV math persisted → citation-locked drafting → idempotent execution with
+exponential-backoff retries → CLOSED, or ESCALATED with a merchant-ready
+summary. Humans approve/reject escalations through the same executor, same
+idempotency, same audit chain.
+
+### The Admissibility Gate (the differentiator)
+
+The AI proposes evidence; only deterministic code admits it. Every claimed
+field must appear **verbatim** in its source document *and* match the system
+of record (shipment AWB, order pincode, order − refunds arithmetic).
+Drafts may only cite admitted exhibits — a deterministic citation validator
+has final authority, no bypass. **Hallucinated evidence in a money-bearing
+filing is structurally impossible, not prompted away.** The eval's ablation
+shows what gate-off would have shipped; adversarial tests show fabricated
+quotes dying at the gate and fabricated documents dying even earlier, at
+schema validation.
+
+## Held-out results (frozen 40 disputes, never tuned on, offline stub)
+
+| metric | result |
 |---|---|
-| Anthropic LLM API | Real when `ANTHROPIC_API_KEY` set; deterministic stub in tests |
-| Razorpay payments/refunds fetch | Real test-mode HTTP (`RazorpayTestAdapter`) when credentials are configured |
-| Dispute contest/accept lifecycle | Labeled simulator (`SimulatorAdapter`) — Razorpay test mode cannot create synthetic disputes to contest, so the real adapter raises `NotSupported` instead of faking responses |
-| Shipping (Shiprocket-shaped) & email store | Mock over the synthetic dataset |
+| Decision agreement with ground truth | **75.0%** — every miss is a documented coverage gap; **zero wrong fights, zero wrong accepts** |
+| Evidence extraction precision | **98.6%** |
+| Automation rate / escalation rate | 42.5% / 57.5% (escalation precision reported strictly, coverage gaps counted against it) |
+| Deadline compliance | **40/40** |
+| Audit chains verified | **40/40** |
+| Net recovered | **₹64,989** (+ ₹1,997 conceded deliberately; ₹153,559 escalated pending human action) |
 
-Every adapter response records which implementation served it.
+Honest headline: contest-everything nets ₹137,556 on this synthetic set —
+more than Recourse. The entire gap is money the agent refuses to fight
+without a deterministic playbook (3 of 6 reason codes are deferred v1
+scope), ₹45,969 of it ground-truth-winnable. `evals/report.md` prices that
+coverage gap instead of hiding it; the dashboard's Evaluation tab renders it
+head-on.
 
-## End-to-end lifecycle
+## Honest integration map
 
-`Orchestrator.process_event({"event": "dispute.created", "dispute_id": ...})`
-drives one case through the §8 machine: intake (duplicate webhooks
-idempotent) → deterministic-then-AI linking (confidence < 0.85 escalates,
-never guesses) → gather → AI extraction → Admissibility Gate (failed evidence
-preserved with exact reasons) → deterministic decision (full EV math
-persisted) → citation-validated draft (FIGHT only) → executor with
-exponential-backoff retries under one idempotency key → CLOSED, or ESCALATED
-with a merchant-ready summary. Every step lands in the per-case audit hash
-chain; `format_timeline(repo, case_id)` reconstructs the whole run from it.
-Deadlines are enforced deterministically: T−24h force-escalate before
-deciding, hard block on all money actions after respond_by.
+| Surface | Real or simulated |
+|---|---|
+| Anthropic LLM | Real when keyed; deterministic stub by default (tests 100% offline) |
+| Razorpay payment/refund lookups | Real test-mode HTTP when credentialed (`RECOURSE_PAYMENTS_ADAPTER=razorpay_test`) |
+| Dispute contest/accept lifecycle | Labeled simulator — Razorpay test mode cannot create synthetic disputes, so the real adapter raises `NotSupported` rather than faking responses |
+| Dataset | Synthetic, scenario-driven (11 failure scenarios at spec §13 rates), byte-identical per seed; ground truth lives **outside** the app DB |
 
-## Dataset
+## Repository map
 
-```bash
-python3 data/generate.py --seed 42
+```
+backend/app/ai/          AI lane: link · extract · draft (untrusted output,
+                         one repair, LowConfidence; cannot import DB/tools)
+backend/app/policy/      playbooks.yaml · Admissibility Gate · decision
+                         engine · citation validator (zero LLM imports)
+backend/app/tools/       executor (one money action per dispute, ever) +
+                         payments adapters
+backend/app/audit/       per-case SHA-256 hash chain + verifier
+backend/app/store/       §12 schema, append-only audit API, schema-version
+                         stamped worlds
+backend/app/orchestrator.py  the §8 state machine — coordination only
+backend/app/api.py       REST boundary + human approve/reject
+backend/app/evals/       oracle · reports · held-out harness
+frontend/                dependency-free dashboard (docket UI, evidence
+                         exhibits, clickable citations, chain badge)
+data/generate.py         deterministic world builder (seed 42)
+evals/run_eval.py        frozen evaluation → metrics.json + report.md
+scripts/                 demo_seed · serve · gate/decision reports · ai_smoke
+docs/                    decisions.md (ADR-001…012) · DEMO.md · spec
 ```
 
-Generates a deterministic, deliberately messy world: 800 orders, 751
-shipments, 746 documents (PODs + Hinglish/English email threads), 120 disputes
-across 6 reason codes and 11 failure scenarios, a webhook feed with duplicate
-deliveries (`data/events.jsonl`), hidden eval labels
-(`data/ground_truth.json`, never stored in the app DB), and a frozen,
-stratified 80-dev / 40-held-out split (`data/split.json` — committed; the
-held-out set is for final evaluation only, never for tuning).
+## Verification
 
-## AI configuration
+207 tests, all offline, ~7s: adversarial gate tests (19), tamper detection
+(5 modes), executor idempotency across restarts, orchestrator failure drills
+(retries, duplicate webhooks, expired deadlines, kill-switch), the human
+approval matrix, anti-leakage and frozen-split protection, byte-identical
+regeneration, and two-run eval determinism. Architectural invariants are
+enforced by AST-scanning tests, not convention — the full invariant→test map
+is in `ARCHITECTURE.md`.
 
-`RECOURSE_AI_PROVIDER=stub` (default — deterministic, offline, no key needed)
-or `anthropic` with `ANTHROPIC_API_KEY` set (fails loudly if missing; never
-silently falls back). Model: `RECOURSE_LLM_MODEL` (default claude-sonnet-4-6).
-Live smoke test: `scripts/ai_smoke.py`. The test suite never touches the
-network.
+## Known limitations
 
-## Payments configuration
-
-`RECOURSE_PAYMENTS_ADAPTER=simulator` (default) or `razorpay_test` with
-`RAZORPAY_KEY_ID`/`RAZORPAY_KEY_SECRET` (fails loudly if missing). Every
-contest/accept is idempotent (`idempotency_key = dispute_id`: one money
-action per dispute, ever) and lands in a per-case SHA-256 audit hash chain —
-`verify_audit_chain(repo, case_id)` detects any modification, deletion, or
-reordering and reports exactly where the chain broke.
-
-## Evaluation
-
-```bash
-python3 data/generate.py --seed 42     # build the frozen world
-python3 evals/run_eval.py --ablate-gate
-```
-
-Replays the 40 frozen held-out disputes (never used for tuning; the harness
-fails loudly on any split alteration) through the real orchestrator, ingests
-simulated outcomes, and writes `evals/metrics.json` + `evals/report.md`.
-Baselines: never-contest (net ₹0) and contest-everything (fights blind, fee
-on losses). The gate ablation (`--ablate-gate`) is analysis-only — it counts
-what inadmissible evidence would have shipped and which decisions would flip
-with the gate off; the production pipeline always keeps the gate on.
-Committed results (offline stub provider, seed 42): 75% decision agreement —
-every miss a documented coverage gap, zero wrong fights/accepts — 42.5%
-automation, 0 deadline violations, 40/40 audit chains valid, net ₹64,989
-recovered with ₹153,559 escalated pending human action. See
-`evals/report.md` for the full honest breakdown including where
-contest-everything beats us and why.
-
-## Dashboard & demo
-
-```bash
-python3 data/generate.py --seed 42     # build the world
-python3 scripts/demo_seed.py           # run curated cases into demo.db
-python3 scripts/serve.py               # http://127.0.0.1:8000
-```
-
-Case queue with deadline urgency, docket-style case files (evidence exhibits
-with live deterministic check panels, decision math, citation-locked drafts
-where clicking [E3] flashes the exhibit), tamper-evident audit timelines, a
-human review panel (approve fight / accept / reject — all server-validated,
-idempotent, executed through the same executor as the agent), and the
-held-out evaluation view including exactly where the system stops and what
-that coverage costs.
-
-## Running
-
-```bash
-python3 -m pip install -r requirements.txt   # PyYAML + Flask
-cd backend
-python -m unittest discover -s tests -v   # all tests, offline
-```
-
-(App entrypoint, dataset generator, and eval harness arrive in later stages —
-see git history; each commit is one verified stage.)
-
-## Environment notes
-
-Developed against Python 3.12 stdlib + Flask. See `docs/decisions.md` for why
-this deviates from the FastAPI/SQLAlchemy/pydantic stack named in the spec —
-the architecture and invariants are unchanged.
+Synthetic world (architecture behavior under controlled messiness, not
+production performance); the committed eval uses the deterministic stub —
+re-run with the real provider for model-level numbers; ground truth derives
+from the same policy caps the engine uses (consistency + coverage, not
+independent judgment); 3 of 6 reason codes deferred by v1 scope and priced
+in the report; frontend logic is exercised via API integration and static
+checks (no browser harness in the build environment — the JS deliberately
+computes nothing).
