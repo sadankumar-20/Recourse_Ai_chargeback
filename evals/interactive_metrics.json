@@ -1,0 +1,13 @@
+{
+ "cases": 11,
+ "needs_input_raised": 11,
+ "asks_specific": 11,
+ "resolved_after_upload": 11,
+ "resumed_to_closed": 11,
+ "resumed_to_escalated": 0,
+ "duplicate_uploads_deduped": 11,
+ "actions_total": 11,
+ "deadline_violations": 0,
+ "chains_invalid": 0,
+ "needs_input_resolution_rate": 1.0
+}

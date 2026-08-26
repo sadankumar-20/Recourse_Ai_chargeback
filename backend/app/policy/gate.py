@@ -242,9 +242,15 @@ def case_preconditions(ctx: GateContext) -> list[CheckResult]:
 
 def _doc_belongs_to_case(doc: Document, ctx: GateContext) -> str | None:
     """Evidence source integrity: the document must be reachable from THIS
-    case's order — the shipment's POD or the customer's own mailbox."""
+    case's order — the shipment's POD, the customer's own mailbox, the
+    courier's tracking channel, or (R4) a merchant upload explicitly
+    attached to THIS case. Linkage only scopes; every content check
+    (verbatim quote, AWB match, pincode, amounts) still applies to uploads."""
     if ctx.case is not None and doc.case_id not in (None, ctx.case.id):
         return f"document {doc.id} is attached to a different case ({doc.case_id})"
+    if doc.provenance == "user_upload" and ctx.case is not None \
+            and doc.case_id == ctx.case.id:
+        return None
     for ship in ctx.shipments:
         if doc.id == ship.pod_doc_id or doc.source == f"courier:{ship.awb}":
             return None

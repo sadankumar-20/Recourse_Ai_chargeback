@@ -25,8 +25,10 @@ from pathlib import Path
 # clear, actionable error instead of a cryptic "no such column" later.
 # History: 1 = Stage 2 original; 2 = Stage 4 added evidence.evidence_key;
 # 3 = R1 added documents.provenance, disputes.provenance, and the
-#     'needs_input' case state (interactive gap resolution).
-SCHEMA_VERSION = 3
+#     'needs_input' case state (interactive gap resolution);
+# 4 = R4 added 'user_submitted' to documents.provenance (the intake
+#     narrative is a stored document with its own origin).
+SCHEMA_VERSION = 4
 
 
 class SchemaVersionError(RuntimeError):
@@ -70,8 +72,8 @@ CREATE TABLE IF NOT EXISTS documents (
     source     TEXT NOT NULL,
     fetched_at TEXT NOT NULL,
     provenance TEXT NOT NULL DEFAULT 'simulator' CHECK (provenance IN
-        ('simulator','user_upload','razorpay_test','tracking_api',
-         'vision_transcribed'))
+        ('simulator','user_upload','user_submitted','razorpay_test',
+         'tracking_api','vision_transcribed'))
 );
 
 CREATE TABLE IF NOT EXISTS shipments (

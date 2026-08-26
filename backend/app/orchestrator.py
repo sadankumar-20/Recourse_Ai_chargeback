@@ -133,10 +133,41 @@ class Orchestrator:
 
     # -- the state machine walk ---------------------------------------------------------
 
+    def resume_case(self, case_id: str) -> CaseResult:
+        """R4: continue a needs_input case after the merchant responded.
+        Same case, same audit history, same order link; the investigation
+        re-plans over the accumulated documents (uploads are preloaded).
+        Idempotent at the money layer as always (idempotency_key = dispute)."""
+        case = self.repo.get_case(case_id)
+        if case is None:
+            raise KeyError(f"no case {case_id!r}")
+        if case.state is not CaseState.NEEDS_INPUT:
+            raise ValueError(f"case is '{case.state.value}', not awaiting "
+                             f"input — nothing to resume")
+        dispute = self.repo.get_dispute(case.dispute_id)
+        self.repo.append_audit(case.id, "INVESTIGATION_RESUMED", {
+            "hours_left": round(self.hours_left(dispute), 1),
+            "uploads_attached": [
+                d.id for d in self.repo.list_documents_for_case(case.id)
+                if d.provenance == "user_upload"]})
+        case = self.repo.update_case_state(case.id, CaseState.GATHERING)
+        try:
+            return self._process(case, dispute, resume=True)
+        except _Escalate as e:
+            return self._escalate(case, dispute, e)
+        except LowConfidence as e:
+            return self._escalate(case, dispute, _Escalate(
+                f"AI low confidence in {e.task}: {e.reason}"))
+
     def run_case(self, case_id: str) -> CaseResult:
         case = self.repo.get_case(case_id)
         if case is None:
             raise KeyError(f"no case {case_id!r}")
+        if case.state is CaseState.NEEDS_INPUT:
+            self.repo.append_audit(case.id, "RUN_REFUSED", {
+                "state": case.state.value,
+                "note": "case is awaiting merchant input — use resume"})
+            return CaseResult(case=case, final_state=case.state)
         if case.state in (CaseState.CLOSED, CaseState.ESCALATED,
                           CaseState.ACTED):
             # Terminal for autonomy: escalated cases belong to humans.
@@ -154,7 +185,8 @@ class Orchestrator:
                 f"AI low confidence in {e.task}: {e.reason}",
                 extra={"ai_records": [r.to_dict() for r in e.records]}))
 
-    def _process(self, case: Case, dispute: Dispute) -> CaseResult:
+    def _process(self, case: Case, dispute: Dispute,
+                 resume: bool = False) -> CaseResult:
         # reason-code coverage is a config-level fact — check before any work
         try:
             playbook = self.playbooks.for_reason(dispute.reason_code)
@@ -163,30 +195,30 @@ class Orchestrator:
 
         # LINK ------------------------------------------------------------------
         self._deadline_guard(dispute, acting=False)
-        case = self.repo.update_case_state(case.id, CaseState.LINKING)
-        order = self._link(case, dispute)
-
-        # GATHER ----------------------------------------------------------------
-        self._deadline_guard(dispute, acting=False)
-        case = self.repo.update_case_state(case.id, CaseState.GATHERING)
+        if resume:
+            order = self.repo.get_order(case.linked_order_id)
+        else:
+            case = self.repo.update_case_state(case.id, CaseState.LINKING)
+            order = self._link(case, dispute)
+            # GATHER --------------------------------------------------------
+            self._deadline_guard(dispute, acting=False)
+            case = self.repo.update_case_state(case.id, CaseState.GATHERING)
         kb_citations: list[dict] = []
         if self.investigation_mode == "agentic":
             outcome = run_investigation(self.repo, case, dispute, order,
                                         playbook, self.ai)
             kb_citations = outcome.kb_citations
             if outcome.termination == "NEEDS_INPUT":
-                # R4 activates the interactive needs_input pause; until then
-                # the structured request escalates to a human.
-                raise _Escalate(
-                    "investigation needs merchant input: "
-                    + (outcome.request_to_user or "additional evidence"),
-                    details=[f"missing required '{m}'"
-                             for m in outcome.missing]
-                    + [f"policy basis ({c['source_id']}:{c['chunk_id']}): "
-                       f"\"{c['quote']}\"" for c in kb_citations[:1]],
-                    extra={"agent_request": outcome.request_to_user,
-                           "termination": outcome.termination,
-                           "kb_citations": kb_citations})
+                # R4: the interactive pause. The case waits for the merchant;
+                # the structured request lives in the AGENT_NEEDS_INPUT audit
+                # entry (served by GET /cases/<id>/needs-input); resume_case
+                # continues the SAME case after input arrives. Deadline rules
+                # keep applying — an expired needs_input case escalates.
+                case = self.repo.update_case_state(case.id,
+                                                   CaseState.NEEDS_INPUT)
+                return CaseResult(case=case,
+                                  final_state=CaseState.NEEDS_INPUT,
+                                  escalation_summary=outcome.request_to_user)
             docs = outcome.documents
         else:
             docs = self._gather(case, order)
@@ -194,7 +226,7 @@ class Orchestrator:
         # EXTRACT + GATE --------------------------------------------------------
         self._deadline_guard(dispute, acting=False)
         candidates = self._extract(case, dispute, docs, playbook)
-        ctx = GateContext(dispute=dispute, order=order,
+        ctx = GateContext(dispute=dispute, order=order, case=case,
                           shipments=self.repo.list_shipments_for_order(order.id),
                           refunds=self.repo.list_refunds_for_order(order.id),
                           documents={d.id: d for d in docs},

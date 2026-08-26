@@ -253,7 +253,8 @@ class TestHeadlineRecovery(AgenticTestBase):
                 "WHERE order_id = ?", (order.id,))
         result = self.orch("agentic").process_event(
             {"event": "dispute.created", "dispute_id": did})
-        self.assertIs(result.final_state, CaseState.ESCALATED)   # R4 pauses
+        # R4 fulfilled the R2 deferral: the case now PAUSES for the merchant
+        self.assertIs(result.final_state, CaseState.NEEDS_INPUT)
         self.assertIn("Upload the courier proof of delivery",
                       result.escalation_summary)
         payload = next(json.loads(e.payload_json)

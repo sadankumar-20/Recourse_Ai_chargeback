@@ -75,6 +75,15 @@ def run_investigation(repo: Repository, case: Case, dispute: Dispute, order,
     history: list[dict] = []
     docs: dict[str, Document] = {}
     kb_citations: list[dict] = []
+    for doc in repo.list_documents_for_case(case.id):
+        if doc.provenance == Provenance.USER_UPLOAD.value:
+            docs[doc.id] = doc
+            history.append({"tool": "read_document",
+                            "args": {"doc_id": doc.id}, "ok": True,
+                            "data": {"id": doc.id, "type": doc.type.value,
+                                     "provenance": doc.provenance},
+                            "summary": f"merchant-uploaded {doc.type.value} "
+                                       f"({doc.source})"})
     invalid_requests = 0
     last_request: tuple | None = None
     repeats = 0

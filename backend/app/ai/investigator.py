@@ -127,6 +127,10 @@ def _deterministic_plan(ctx: InvestigationContext,
     order_id = ctx.order["id"]
     keys = {c["key"] for c in ctx.checklist}
 
+    pod_seen = any(h["tool"] == "read_document" and h.get("ok")
+                   and (h.get("data") or {}).get("type") == "pod"
+                   for h in history)
+
     ships = _seen(history, "get_shipments")
     if not ships:
         return PlannerDecision("tool", "establish whether a shipment exists",
@@ -134,7 +138,7 @@ def _deterministic_plan(ctx: InvestigationContext,
                                args={"order_id": order_id})
     shipments = (ships[-1].get("data") or {}).get("shipments", [])
 
-    if "pod" in keys and shipments:
+    if "pod" in keys and shipments and not pod_seen:
         pod_ids = [s["pod_doc_id"] for s in shipments if s.get("pod_doc_id")]
         read_ids = {h["args"].get("doc_id") for h in _seen(history,
                                                            "read_document")}

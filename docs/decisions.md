@@ -463,3 +463,52 @@ artifact-entering citations; the verifier's rejection power is demonstrated
 by the adversarial tests, not by that number. The R2 A/B's avg tool calls
 rose 3.1 -> 3.83 (the added knowledge query) with recoveries and admissions
 unchanged; the frozen held-out eval re-run proved byte-identical.
+
+## ADR-016 — Interactive intake, uploads, and NEEDS_INPUT resume (R4)
+
+**Interpretation never replaces the source.** Intake stores the merchant's
+words VERBATIM as a case document (provenance user_submitted, schema v4
+widened the documents vocabulary for exactly this); the AI triage — reason
+guess, extracted references, confidence, missing list — is stored separately
+in CASE_SUBMITTED, explicitly labeled untrusted. Unanchorable reports fail
+with a structured "what's missing" answer (422), never a guessed case.
+Interactive cases run agentic by design.
+
+**Uploads are documents, not truths.** .txt and .eml (stdlib-parsed,
+From/To/Subject/Date preserved) become documents with provenance
+user_upload, content-hash ids (byte-identical re-uploads dedupe to the same
+document), and a DOCUMENT_UPLOADED audit entry carrying filename, type,
+sha256, and the untrusted-until-verified note. PDFs and images are refused
+with honest 415s (vision transcription is R5) — no pretend parsing.
+
+**The gate gained its fourth linkage channel, not a bypass.** A user_upload
+document attached to THIS case is *linked*; every content check (verbatim
+quote, AWB-vs-shipment, pincode, amounts) still applies — proven by the
+wrong-pincode-upload test (linked, INADMISSIBLE, no money moved). First run
+exposed that neither GateContext constructor passed the case, so the channel
+could never fire — fixed at both call sites; the frozen eval was re-run
+after the gate change and proven byte-identical (synthetic documents never
+carry user_upload).
+
+**NEEDS_INPUT is now a real pause.** The R2 deferral is fulfilled: the case
+enters needs_input (schema-v3 state), the structured ask is served by GET
+/needs-input (request id, requested keys, reason, specific action, status,
+deadline), uploads while paused audit USER_INPUT_RECEIVED, and POST /resume
+re-enters the SAME case (same audit history, same order link) — uploads are
+preloaded into the investigation, the planner recognizes a read POD document
+as satisfying the pod requirement, and the loop re-plans over accumulated
+state. Resume with nothing new pauses again; resume after closure is 409;
+the money layer stays idempotent regardless.
+
+**Deadlines are server-authoritative.** GET /deadline returns respond_by,
+server_time, remaining_seconds, and SAFE/WARNING(<48h)/CRITICAL(<24h)/
+EXPIRED — the UI may animate a countdown from these numbers, but allowance
+is always re-checked server-side (expired resume/approval = 409). Status
+transitions audit ONCE each (DEADLINE_CRITICAL etc.), never per tick.
+
+**Measured (evals/interactive_metrics.json, dev missing_pod with the courier
+blinded):** 11/11 asked for input, 11/11 asks named the exact AWB, 11/11
+resolved after a merchant upload and closed through the unchanged gate and
+decision engine, 11/11 duplicate uploads deduped, 11 money actions for 11
+cases, zero deadline violations, all chains valid. R2/R3 artifacts
+reproduced; frozen eval proven identical.

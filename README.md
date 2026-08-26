@@ -67,6 +67,22 @@ A/B (`evals/agentic_ab.json`): 11 missing-POD cases recovered, +33 admitted
 evidence items, 3.1 avg tool calls, zero invalid requests or violations —
 with the frozen held-out eval proven byte-identical.
 
+## Interactive investigation (R4)
+
+"Tell Recourse what happened." POST /intake takes a merchant's natural-
+language report, preserves it verbatim (provenance `user_submitted`),
+triages it (untrusted interpretation, stored separately), anchors it to a
+real order, and runs the agentic investigation. When evidence is missing
+everywhere, the case PAUSES in `needs_input` with a specific ask ("Upload
+the courier proof of delivery for AWB …"); the merchant uploads .txt/.eml
+evidence (provenance `user_upload`, content-hash deduped, gated like
+everything else — a wrong-pincode upload is linked but inadmissible), then
+POST /resume continues the same case to a deterministic decision. Deadlines
+are server-authoritative (`GET /cases/<id>/deadline`: SAFE → WARNING →
+CRITICAL → EXPIRED, transitions audited once). Measured: 11/11 blinded
+missing-POD cases asked, named the exact AWB, and resolved after upload
+(`evals/interactive_metrics.json`).
+
 ## Knowledge base with verified citations (R3)
 
 A local, versioned, offline KB (dispute policy, merchant SOPs, representment
