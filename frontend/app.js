@@ -61,22 +61,89 @@ async function renderLanding() {
 }
 
 /* ---------- intake ---------- */
+const WF = [
+  ["INTAKE", "Understand what happened \u2014 your words, stored verbatim."],
+  ["INVESTIGATE", "Search orders, payments, shipments, inbox and policy."],
+  ["VERIFY", "AI findings pass deterministic evidence verification."],
+  ["DECIDE", "Policy engine evaluates FIGHT / ACCEPT / ESCALATE."],
+  ["RECOVER", "Only the controlled executor can submit financial actions."]];
+const EXAMPLES = [
+  "The customer says the order never arrived, but we dispatched it on time",
+  "Customer disputes the payment for order #0019 and wants a refund",
+  "Courier shows delivered for order #0019 but our POD file is missing",
+  "Customer was charged twice for pay_0042 and wants one charge reversed"];
+
 async function renderIntake() {
-  main.innerHTML = `<div class="hero">
-    <h1>Tell Recourse what happened.</h1>
-    <p class="sub">Describe the dispute in your own words, or paste the
-      customer's message. Recourse anchors it to your records and starts a
-      real investigation.</p>
-    <textarea id="story" placeholder="e.g. The customer says they never received order #0019, but our courier says it was delivered\u2026"></textarea>
-    <div class="hero-row">
-      <input type="text" id="payid" placeholder="pay_0019 (optional)">
-      <button class="btn voice" id="mic" aria-pressed="false" hidden>\ud83c\udf99 Dictate</button>
-      <button class="btn primary" id="go">Start investigation</button>
-    </div>
-    <p class="hint">Your words are stored verbatim as source material
-      ${prov("user_submitted")} \u00b7 the AI's reading of them is labeled an
-      untrusted interpretation \u00b7 the decision is always deterministic.</p>
-    <div class="interp" id="interp"></div></div>`;
+  main.innerHTML = `<div class="cc">
+    <div class="kicker">Recourse \u00b7 merchant revenue recovery</div>
+    <h1>Investigate before you pay.</h1>
+    <p class="support">Recourse uses AI to investigate disputes, verify
+      evidence, and recover revenue \u2014 without letting AI make unsafe
+      financial decisions.</p>
+    <div class="wf">${WF.map(([k, d]) =>
+      `<div><b>${k}</b><span class="wfd">${d}</span></div>`).join("")}</div>
+    <div class="cc-grid">
+      <div class="workspace">
+        <div class="whead">Start an investigation</div>
+        <p class="sub" style="margin:4px 0 10px">Tell Recourse what happened
+          \u2014 your own words, the customer's pasted message, or a
+          payment / order reference.</p>
+        <textarea id="story" placeholder="The customer says they never received order #1042, but our courier says it was delivered yesterday\u2026"></textarea>
+        <div class="chips">${EXAMPLES.map((e, i) =>
+          `<button data-ex="${i}">\u201c${esc(e.slice(0, 44))}\u2026\u201d</button>`).join("")}</div>
+        <div class="hero-row">
+          <input type="text" id="payid" placeholder="pay_0019 (optional)">
+          <button class="btn voice" id="mic" aria-pressed="false" hidden>\ud83c\udf99 Dictate</button>
+          <button class="btn primary" id="go">Start investigation</button>
+        </div>
+        <div class="trust">
+          <div><b>YOUR MESSAGE</b><span>Stored verbatim</span></div>
+          <div><b>AI INTERPRETATION</b><span class="u">Untrusted</span></div>
+          <div><b>FINAL DECISION</b><span class="d">Deterministic</span></div>
+        </div>
+        <div class="trust-line">Recourse investigates with AI \u2014 but a
+          financial decision is never made by the LLM alone.</div>
+        <div class="interp" id="interp"></div>
+      </div>
+      <div>
+        <div class="preview">
+          <div class="plabel">EXAMPLE INVESTIGATION \u2014 PRODUCT PREVIEW,
+            NOT LIVE DATA</div>
+          <div class="pbody">
+            <div class="claim">\u201cI never received my order.\u201d</div>
+            <div class="exrow"><span>Order</span><span class="ok">\u2713 found</span></div>
+            <div class="exrow"><span>Shipment</span><span class="ok">\u2713 found</span></div>
+            <div class="exrow"><span>Courier tracking</span><span class="ok">\u2713 delivered</span></div>
+            <div class="exrow"><span>Proof of delivery</span><span class="warn">\u26a0 missing</span></div>
+            <div class="exrow"><span>Policy</span><span class="ok">\u2713 retrieved</span></div>
+            <div class="pneeds"><b>RECOURSE NEEDS INPUT</b><br>
+              \u201cUpload the courier proof of delivery.\u201d</div>
+            <div class="pdone">EVIDENCE VERIFIED \u2192 POLICY EVALUATED
+              \u2192 DECISION READY</div>
+            <div class="pdl"><div class="k">EVERY DISPUTE HAS A DEADLINE
+              (example)</div><div class="t">23:41:18</div>
+              <div class="k">live cases use the server-authoritative
+              countdown</div></div>
+          </div>
+        </div>
+        <div class="panel" id="sysstatus"><h3>System status</h3>
+          <div class="muted">checking\u2026</div></div>
+      </div>
+    </div></div>`;
+  document.querySelectorAll(".chips button").forEach((b) =>
+    b.addEventListener("click", () => {
+      $("#story").value = EXAMPLES[b.dataset.ex]; $("#story").focus();
+    }));
+  api("/health").then((h) => {
+    const rows = Object.entries(h.integrations || {}).map(([k, v]) =>
+      `<div class="st"><span>${esc(k.toUpperCase())}</span>
+       <span><span class="dot ${esc(v.mode)}"></span>${esc(v.mode)}</span></div>`);
+    $("#sysstatus").innerHTML = `<h3>System status</h3>${rows.join("")}
+      <div class="muted" style="font:10px var(--mono);margin-top:6px">
+      simulated surfaces are labeled \u2014 never claimed real</div>`;
+    const rail = $("#rail-status");
+    if (rail) rail.innerHTML = rows.join("");
+  }).catch(() => {});
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (SR) {
     const mic = $("#mic"); mic.hidden = false;

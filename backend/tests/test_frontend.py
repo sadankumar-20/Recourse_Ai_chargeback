@@ -86,3 +86,16 @@ def test_metrics_page_shows_honest_v2_including_negative():
     assert "label_caveat" in JS and "honest" in JS
     api = (Path(__file__).resolve().parents[1] / "app" / "api.py").read_text()
     assert "v2_metrics.json" in api
+
+
+def test_command_center_opening():
+    assert "Investigate before you pay" in JS
+    assert "EXAMPLE INVESTIGATION" in JS and "NOT LIVE DATA" in JS
+    assert "RECOURSE NEEDS INPUT" in JS
+    for stage in ["INTAKE", "INVESTIGATE", "VERIFY", "DECIDE", "RECOVER"]:
+        assert stage in JS
+    assert 'api("/health")' in JS          # status from backend, not hardcoded
+    assert "Stored verbatim" in JS and "Untrusted" in JS \
+        and "Deterministic" in JS
+    assert "wf div:hover .wfd" in CSS       # hover reveal
+    assert "server-authoritative" in JS     # example deadline labeled
