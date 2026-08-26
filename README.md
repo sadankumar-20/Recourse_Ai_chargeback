@@ -1,201 +1,130 @@
-# Recourse — an AI chargeback defense agent
+# Recourse
 
-**The AI can recommend. The policy engine can verify. Only the execution
-layer can move money — and every step lands in a tamper-evident audit
-chain.**
+**Agentic AI for merchant dispute recovery.**
 
-When a customer files a chargeback, an Indian SMB merchant has 4–7 days to
-assemble courier proof, order records, and email evidence — or lose by
-default. Recourse turns those scattered, messy records (including Hinglish
-email threads) into a deadline-safe, evidence-verified defense: it fights
-the disputes worth fighting, concedes the hopeless ones for less than the
-fee, and escalates to a human with a summary naming exactly what's missing
-and the hours remaining.
+When a chargeback arrives, Recourse doesn't blindly fight it. It
+investigates: searches the merchant's records, checks shipment and payment
+data, queries the courier's own tracking, retrieves relevant policy, asks
+the merchant for missing evidence, verifies every claim deterministically,
+calculates whether action is justified, executes only through a bounded
+idempotent payment layer — and leaves a cryptographically verifiable trail.
 
-Built stage-by-stage for the Razorpay Student AI Builder Program; the git
-history is the engineering story. Full design record: `docs/decisions.md`
-(ADR-001…012) · [`ARCHITECTURE.md`](ARCHITECTURE.md) ·
-[`docs/DEMO.md`](docs/DEMO.md).
+> **AI investigates. Policy decides. Execution acts. Audit proves.**
 
-## Eval v2 (R7) — the proof
+This is not a chatbot. It is a bounded investigation system where the LLM
+never touches money, policy, or truth.
 
-`python3 evals/run_eval_v2.py` replays the frozen held-out 40 through the
-real orchestrator in both modes, twice (byte-identical), plus causal
-ablations (tracking, RAG, vision), a recoverable-gap protocol, a 4-vector
-prompt-injection battery, and idempotency replays. Headline: **7 fixed
-escalations resolved by the agent, 0 regressions, +21 admitted exhibits, 0
-unsafe actions** — with the honest caveat that v1 outcome labels price
-those recoveries at a net −₹3,500 (`evals/v2_report.md` explains both
-numbers; neither is hidden).
+## The problem
 
-## The cockpit (R6)
+A real dispute never arrives as a clean record with obvious evidence. It
+arrives as fragments: a customer email + a payment + an order + a shipment
++ courier tracking + a POD that may be missing + refund history + policy
+requirements + a hard network deadline. Chargeback teams don't lose money
+because they can't generate text — they lose it because assembling and
+verifying this evidence is slow, and deadlines don't wait.
 
-The UI is an investigation cockpit: **intake in your own words** (optional
-browser voice dictation, feature-detected), a live **Investigation Ledger**
-rendered exclusively from the tamper-evident audit chain, a **server-
-authoritative countdown** (local ticks, 30s re-sync, EXPIRED disables
-actions the server would reject anyway), **provenance badges** on every
-fact, drag-and-drop uploads on the agent's ask-panel, and click-to-verify
-KB citation popovers. Zero frontend dependencies; works offline;
-reduced-motion respected.
+## Why not just an LLM?
+
+An LLM can read the email and produce a plausible answer. A merchant cannot
+safely let it decide "fight and move money." So Recourse separates powers:
+
+```
+UNTRUSTED INPUT -> AI INVESTIGATION -> EVIDENCE -> ADMISSIBILITY GATE
+      -> DECISION ENGINE -> EXECUTOR -> AUDIT CHAIN
+      (AI-controlled)      (deterministic)  (only money writer) (proof)
+```
+
+- The **investigator** (LLM or deterministic planner) chooses read-only,
+  budget-metered, audited tools. It may say "check tracking"; it can never
+  say "therefore FIGHT".
+- The **Admissibility Gate** verifies every evidence claim: verbatim quote
+  in a linked source document, AWB vs shipments, pincode vs order, amounts
+  vs records. Vision transcriptions, uploads, tracking records, and KB
+  citations all pass the same bar — a lying vision transcription is
+  *inadmissible*, not persuasive (tested).
+- The **decision engine** computes FIGHT / ACCEPT / ESCALATE from versioned
+  playbooks and EV math. RAG cannot change it (ablation-proven: zero
+  decision changes).
+- The **executor** is the only financial writer: one idempotent action per
+  dispute, ever. Deadlines are server-authoritative.
+- The **audit hash chain** records every step tamper-evidently; the UI's
+  Investigation Ledger renders only these events.
+
+## The agentic loop (and when not to use it)
+
+Fixed pipeline: link -> gather -> extract -> gate -> decide. Agentic:
+understand -> plan -> read-only tool -> observe -> verify -> identify gaps
+-> query tracking / ask the merchant (NEEDS_INPUT) -> resume -> finish.
+Eval v2 shows clean, complete cases are handled identically by the fixed
+path at zero tool cost — so batch replay defaults fixed, interactive intake
+runs agentic. Use AI where the mess is.
+
+## Evaluation (evals/v2_report.md — honest numbers, run twice, byte-identical)
+
+| metric | fixed | agentic |
+|---|---|---|
+| automation | 42% | 60% |
+| fixed escalations resolved by agent | — | **7** (0 regressions) |
+| additional gate-admitted exhibits | — | +21 |
+| avg / max tool calls (budget 12) | 0 | 3.27 / 6 |
+| invalid tool calls / budget violations | 0 | 0 |
+| deadline violations / invalid chains | 0 | 0 |
+| prompt-injection vectors blocked | — | 4/4, unsafe actions 0 |
+| recoverable-gap resolution (courier blinded) | — | 7/7 |
+| net money delta on v1 labels | — | **−₹3,500** |
+
+**The negative number, explained (not hidden):** the 7 recovered
+cases are missing-POD disputes whose frozen v1 outcome labels price fights
+at a 10% win rate — labels authored under the *fixed pipeline's* capability
+assumption, i.e. for a world where that evidence couldn't exist. Eval v2
+therefore demonstrates an agentic **capability** improvement but does not
+claim positive incremental revenue from those labels. We found the
+limitation instead of tuning the model until the graph looked good.
+
+## Real vs simulated integrations
+
+| Surface | Default | Real mode | Labeling |
+|---|---|---|---|
+| AI (planner/triage/drafts) | deterministic stub | `RECOURSE_AI_PROVIDER=anthropic` + `ANTHROPIC_API_KEY` | /health: real/simulator |
+| Tracking | simulator | `RECOURSE_TRACKING=aftership` + `AFTERSHIP_API_KEY` | provenance `tracking_api` vs `simulator`; loud failure, never silent fallback |
+| Vision (POD images) | unavailable (honest 415) | Anthropic vision via the AI key | provenance `vision_transcribed` |
+| Payments | simulator (labeled) | Razorpay test-mode lookups; dispute lifecycle honestly `NotSupported` | every action response carries `simulated` |
+| Knowledge | local versioned KB | local (by design) | provenance `kb_local` |
 
 ## Quickstart
 
 ```bash
-python3 -m pip install -r requirements.txt        # PyYAML + Flask
-python3 data/generate.py --seed 42                # deterministic messy world
-cd backend && python3 -m unittest discover -s tests && cd ..   # 207 tests, offline
-python3 evals/run_eval.py --ablate-gate           # frozen held-out evaluation
-python3 scripts/demo_seed.py && python3 scripts/serve.py       # dashboard :8000
+git clone https://github.com/sadankumar-20/Recourse_Ai_chargeback && cd Recourse_Ai_chargeback
+python3 data/generate.py --seed 42          # deterministic world (no deps)
+cd backend && python3 -m unittest discover -s tests && cd ..   # 299 green, zero network
+python3 scripts/demo_seed.py                # seeds cases incl. a live NEEDS_INPUT demo
+python3 scripts/serve.py                    # open http://localhost:8000
+python3 evals/run_eval_v2.py                # the proof, reproduced on your machine
 ```
 
-Zero network required: the LLM defaults to a faithful deterministic stub and
-payments to a labeled simulator. For the real model:
-`RECOURSE_AI_PROVIDER=anthropic ANTHROPIC_API_KEY=…` (fails loudly if
-unkeyed — never a silent fallback).
+## Environment variables
 
-## What the agent does (spec §8, end to end)
-
-webhook intake (duplicate deliveries idempotent) → deterministic-then-AI
-order linking (confidence < 0.85 escalates; the system never guesses) →
-document gathering → AI evidence extraction (verbatim quotes, untranslated)
-→ **the Admissibility Gate** → deterministic FIGHT/ACCEPT/ESCALATE with full
-EV math persisted → citation-locked drafting → idempotent execution with
-exponential-backoff retries → CLOSED, or ESCALATED with a merchant-ready
-summary. Humans approve/reject escalations through the same executor, same
-idempotency, same audit chain.
-
-### The Admissibility Gate (the differentiator)
-
-The AI proposes evidence; only deterministic code admits it. Every claimed
-field must appear **verbatim** in its source document *and* match the system
-of record (shipment AWB, order pincode, order − refunds arithmetic).
-Drafts may only cite admitted exhibits — a deterministic citation validator
-has final authority, no bypass. **Hallucinated evidence in a money-bearing
-filing is structurally impossible, not prompted away.** The eval's ablation
-shows what gate-off would have shipped; adversarial tests show fabricated
-quotes dying at the gate and fabricated documents dying even earlier, at
-schema validation.
-
-## Investigation modes (R2)
-
-`RECOURSE_INVESTIGATION=fixed` (default) runs the Stage-8 predefined gather
-path; `agentic` runs a bounded planner-and-tools loop: the model (or the
-deterministic offline planner) decides what to check next via read-only,
-budget-metered, audited tools, notices gaps (e.g. a missing POD), and can
-query the courier's own tracking record to recover them. Both modes feed the
-same unchanged extraction, Admissibility Gate, and decision engine. Dev-split
-A/B (`evals/agentic_ab.json`): 11 missing-POD cases recovered, +33 admitted
-evidence items, 3.1 avg tool calls, zero invalid requests or violations —
-with the frozen held-out eval proven byte-identical.
-
-## Interactive investigation (R4)
-
-"Tell Recourse what happened." POST /intake takes a merchant's natural-
-language report, preserves it verbatim (provenance `user_submitted`),
-triages it (untrusted interpretation, stored separately), anchors it to a
-real order, and runs the agentic investigation. When evidence is missing
-everywhere, the case PAUSES in `needs_input` with a specific ask ("Upload
-the courier proof of delivery for AWB …"); the merchant uploads .txt/.eml
-evidence (provenance `user_upload`, content-hash deduped, gated like
-everything else — a wrong-pincode upload is linked but inadmissible), then
-POST /resume continues the same case to a deterministic decision. Deadlines
-are server-authoritative (`GET /cases/<id>/deadline`: SAFE → WARNING →
-CRITICAL → EXPIRED, transitions audited once). Measured: 11/11 blinded
-missing-POD cases asked, named the exact AWB, and resolved after upload
-(`evals/interactive_metrics.json`).
-
-## Knowledge base with verified citations (R3)
-
-A local, versioned, offline KB (dispute policy, merchant SOPs, representment
-guide) behind two read-only registry tools: `search_knowledge` (BM25,
-deterministic) and `find_similar_cases` (precedent as context only). The
-gate's philosophy applied to RAG: every citation entering a draft or
-escalation carries source_id + chunk_id + an exact quote and is verified
-VERBATIM by `policy/kb_citations.py` — paraphrases fail with structured
-reasons. Drafts gain a code-inserted, re-validated "Policy basis" appendix;
-a test proves decisions are identical with knowledge on or off, and a
-poisoned KB document ("IGNORE ALL PREVIOUS INSTRUCTIONS…") produces a
-bit-identical investigation. Metrics: `evals/kb_metrics.json`.
-
-## Held-out results (frozen 40 disputes, never tuned on, offline stub)
-
-| metric | result |
-|---|---|
-| Decision agreement with ground truth | **75.0%** — every miss is a documented coverage gap; **zero wrong fights, zero wrong accepts** |
-| Evidence extraction precision | **98.6%** |
-| Automation rate / escalation rate | 42.5% / 57.5% (escalation precision reported strictly, coverage gaps counted against it) |
-| Deadline compliance | **40/40** |
-| Audit chains verified | **40/40** |
-| Net recovered | **₹64,989** (+ ₹1,997 conceded deliberately; ₹153,559 escalated pending human action) |
-
-Honest headline: contest-everything nets ₹137,556 on this synthetic set —
-more than Recourse. The entire gap is money the agent refuses to fight
-without a deterministic playbook (3 of 6 reason codes are deferred v1
-scope), ₹45,969 of it ground-truth-winnable. `evals/report.md` prices that
-coverage gap instead of hiding it; the dashboard's Evaluation tab renders it
-head-on.
-
-## Real integrations (R5)
-
-`RECOURSE_TRACKING=aftership` + `AFTERSHIP_API_KEY` switches courier
-tracking to real HTTP (provenance `tracking_api`); the default simulator
-stays honestly labeled. With `RECOURSE_AI_PROVIDER=anthropic`, image
-uploads (POD photos) are vision-transcribed into text documents (provenance
-`vision_transcribed`) that the unchanged gate then verifies field by field —
-a lying transcription produces inadmissible evidence, not a wrong decision
-(tested). `GET /health` reports per-surface connected/simulator status with
-no key material ever in a response.
-
-## Honest integration map
-
-| Surface | Real or simulated |
-|---|---|
-| Anthropic LLM | Real when keyed; deterministic stub by default (tests 100% offline) |
-| Razorpay payment/refund lookups | Real test-mode HTTP when credentialed (`RECOURSE_PAYMENTS_ADAPTER=razorpay_test`) |
-| Dispute contest/accept lifecycle | Labeled simulator — Razorpay test mode cannot create synthetic disputes, so the real adapter raises `NotSupported` rather than faking responses |
-| Dataset | Synthetic, scenario-driven (11 failure scenarios at spec §13 rates), byte-identical per seed; ground truth lives **outside** the app DB |
-
-## Repository map
-
-```
-backend/app/ai/          AI lane: link · extract · draft (untrusted output,
-                         one repair, LowConfidence; cannot import DB/tools)
-backend/app/policy/      playbooks.yaml · Admissibility Gate · decision
-                         engine · citation validator (zero LLM imports)
-backend/app/tools/       executor (one money action per dispute, ever) +
-                         payments adapters
-backend/app/audit/       per-case SHA-256 hash chain + verifier
-backend/app/store/       §12 schema, append-only audit API, schema-version
-                         stamped worlds
-backend/app/orchestrator.py  the §8 state machine — coordination only
-backend/app/api.py       REST boundary + human approve/reject
-backend/app/evals/       oracle · reports · held-out harness
-frontend/                dependency-free dashboard (docket UI, evidence
-                         exhibits, clickable citations, chain badge)
-data/generate.py         deterministic world builder (seed 42)
-evals/run_eval.py        frozen evaluation → metrics.json + report.md
-scripts/                 demo_seed · serve · gate/decision reports · ai_smoke
-docs/                    decisions.md (ADR-001…012) · DEMO.md · spec
-```
-
-## Verification
-
-207 tests, all offline, ~7s: adversarial gate tests (19), tamper detection
-(5 modes), executor idempotency across restarts, orchestrator failure drills
-(retries, duplicate webhooks, expired deadlines, kill-switch), the human
-approval matrix, anti-leakage and frozen-split protection, byte-identical
-regeneration, and two-run eval determinism. Architectural invariants are
-enforced by AST-scanning tests, not convention — the full invariant→test map
-is in `ARCHITECTURE.md`.
+`RECOURSE_AI_PROVIDER` (stub|anthropic), `ANTHROPIC_API_KEY`,
+`RECOURSE_TRACKING` (simulator|aftership), `AFTERSHIP_API_KEY`,
+`RECOURSE_KNOWLEDGE` (true|false — graceful structured error when off),
+`RECOURSE_INVESTIGATION` (fixed|agentic). All optional; every absence is
+labeled, never silently faked.
 
 ## Known limitations
 
-Synthetic world (architecture behavior under controlled messiness, not
-production performance); the committed eval uses the deterministic stub —
-re-run with the real provider for model-level numbers; ground truth derives
-from the same policy caps the engine uses (consistency + coverage, not
-independent judgment); 3 of 6 reason codes deferred by v1 scope and priced
-in the report; frontend logic is exercised via API integration and static
-checks (no browser harness in the build environment — the JS deliberately
-computes nothing).
+Synthetic evaluation world at modest scale; v1 outcome-label limitation
+above; real Anthropic/AfterShip paths implemented and offline-tested to the
+transport boundary but requiring credentials to exercise live; browser
+voice depends on the browser engine; the ledger's liveness is
+reveal-plus-polling, not streaming (the orchestrator is synchronous).
+
+## Documentation map
+
+`docs/ARCHITECTURE.md` · `docs/DEMO_SCRIPT.md` · `docs/PANEL_STORY.md` ·
+`docs/PANEL_QA.md` · `docs/BUILD_TIMELINE.md` · `docs/VIDEO_SCRIPT.md` ·
+`docs/decisions.md` (ADR-001…019, including the negative finding) ·
+`docs/DEPLOY.md`.
+
+*A student project for the Razorpay Student AI Builder program — not an
+official Razorpay product; an architecture demonstration for merchant
+revenue-recovery workflows.*

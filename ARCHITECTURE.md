@@ -113,3 +113,27 @@ including conflicting second actions), audits every path
 | Dataset | Synthetic, scenario-driven, seed-reproducible; ground truth stored **outside** the app DB |
 
 Full decision history: [`docs/decisions.md`](decisions.md) (ADR-001…012).
+
+
+## FINAL SYSTEM DIAGRAM (R8)
+
+```
+USER ──► INTAKE (verbatim-first) ──► ORCHESTRATOR ──► AGENTIC INVESTIGATOR   [AI-CONTROLLED]
+                                                        │ requests-as-data
+                        ┌───────────────────────────────┤
+                        │ read-only, budgeted, audited  ▼
+                        │  search_orders · get_order · get_dispute · get_shipments
+                        │  get_refunds · search_inbox · read_document
+                        │  fetch_tracking · search_knowledge · find_similar_cases
+                        ▼
+                    EVIDENCE (user upload · tracking API · vision transcription ·
+                              simulator/Razorpay-test data · KB citations)
+                        ▼
+                ADMISSIBILITY GATE  ── verbatim + system-of-record checks   [DETERMINISTIC]
+                        ▼
+                DECISION ENGINE  ── FIGHT / ACCEPT / ESCALATE (EV, versioned) [DETERMINISTIC]
+                        ▼
+                EXECUTOR ── the ONLY money writer, idempotent               [EXECUTION]
+                        ▼
+                AUDIT HASH CHAIN ── every step, tamper-evident              [AUDIT]
+```
