@@ -549,3 +549,23 @@ string patches silently missed (fixed line-wise against the real source);
 and the R4 "arrives in R5" placeholder assertion correctly broke when R5
 arrived (updated to assert the actionable message). Frozen eval and all
 R2-R4 artifacts re-proven identical after everything.
+
+## ADR-019 — Eval v2: measure honestly, twice (R7)
+
+The final evaluation replays the FROZEN held-out 40 through the REAL
+orchestrator (no parallel pipeline) with deterministic providers, twice,
+proving byte-identical artifacts. Headline: the agent resolved 7 cases the
+fixed pipeline escalated (zero regressions, +21 gate-admitted exhibits,
+5.0-ish avg tool calls, budget never hit) — and on v1 outcome labels the
+NET MONEY DELTA IS NEGATIVE (-Rs.3,500), because those labels price
+missing_pod fights at 10% win, authored under the fixed pipeline's
+capability assumption (ADR-014). We report capability and label-priced
+money side by side rather than choosing the flattering one; resolving the
+tension belongs to a future dataset version, not to tuning. Ablations are
+causal, not correlational: tracking removed -> recoveries drop to fixed
+levels; knowledge off -> ZERO decision changes; lying vision -> rejected.
+Four injection vectors (customer email, POD-style doc, poisoned KB, intake
+narrative) leave terminal state, action, and the money surface
+bit-identical to clean baselines: unsafe actions 0. Idempotency replays
+hold. The held-out set was never tuned against — weaknesses are documented
+in 'Where the agent fails', not tuned away.

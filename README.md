@@ -17,6 +17,17 @@ history is the engineering story. Full design record: `docs/decisions.md`
 (ADR-001…012) · [`ARCHITECTURE.md`](ARCHITECTURE.md) ·
 [`docs/DEMO.md`](docs/DEMO.md).
 
+## Eval v2 (R7) — the proof
+
+`python3 evals/run_eval_v2.py` replays the frozen held-out 40 through the
+real orchestrator in both modes, twice (byte-identical), plus causal
+ablations (tracking, RAG, vision), a recoverable-gap protocol, a 4-vector
+prompt-injection battery, and idempotency replays. Headline: **7 fixed
+escalations resolved by the agent, 0 regressions, +21 admitted exhibits, 0
+unsafe actions** — with the honest caveat that v1 outcome labels price
+those recoveries at a net −₹3,500 (`evals/v2_report.md` explains both
+numbers; neither is hidden).
+
 ## The cockpit (R6)
 
 The UI is an investigation cockpit: **intake in your own words** (optional
