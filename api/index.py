@@ -48,7 +48,8 @@ def _bootstrap() -> None:
         SimulatorAdapter(repo, outcomes={d: g["gt_outcome_if_fought"]
                                          for d, g in gt.items()}),
         ai_client=get_client(), playbooks=pb,
-        now=datetime.fromisoformat(split["sim_now"]), sleep=lambda s: None)
+        now=datetime.fromisoformat(split["sim_now"]), sleep=lambda s: None,
+        investigation_mode="agentic")   # R6: rich Investigation Ledgers
     wanted = (datagen.CLEAN, datagen.HINGLISH, datagen.CONFLICT_PIN,
               datagen.HOPELESS, datagen.AMBIGUOUS, datagen.DELAYED)
     for scenario in wanted:
@@ -61,6 +62,28 @@ def _bootstrap() -> None:
             orch.process_event({"event": "dispute.created", "dispute_id": did,
                                 "arrival": split["sim_now"]})
             break
+
+    # R6: one LIVE interactive case — courier blinded so the agent pauses in
+    # needs_input and the deployed cockpit opens on the ask-panel demo
+    # (upload a POD, resume, watch the unchanged gate admit it).
+    from app.intake import submit_intake
+    for did in split["dev"]:
+        if gt[did]["scenario"] != datagen.MISSING_POD:
+            continue
+        d = repo.get_dispute(did)
+        if d.reason_code.value not in pb.reason_codes \
+                or repo.get_case_by_dispute(did):
+            continue
+        order = repo.get_order_by_payment(d.payment_id)
+        with repo.conn:
+            repo.conn.execute("UPDATE shipments SET status='in_transit' "
+                              "WHERE order_id = ?", (order.id,))
+        res = submit_intake(
+            repo, f"The customer says they never received order "
+                  f"#{order.id.removeprefix('ord_')}, but we dispatched it.",
+            get_client(), now=datetime.fromisoformat(split["sim_now"]))
+        orch.run_case(res.case.id)
+        break
     repo.close()
 
 
