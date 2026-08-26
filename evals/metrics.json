@@ -1,12 +1,12 @@
 {
  "meta": {
-  "run_at": "2026-08-26T04:42:45+00:00",
-  "wall_seconds": 0.473,
+  "run_at": "2026-08-26T09:42:00+00:00",
+  "wall_seconds": 0.905,
   "handling_time_s": {
-   "median": 0.0108,
-   "avg": 0.0118,
-   "min": 0.0026,
-   "max": 0.0227
+   "median": 0.0172,
+   "avg": 0.0226,
+   "min": 0.0039,
+   "max": 0.1306
   },
   "ai_provider": "stub",
   "note": "handling times are wall-clock with the configured AI provider; no manual-handling baseline exists in the dataset, so none is claimed"

@@ -44,6 +44,11 @@ INVESTIGATION_MODE = os.environ.get("RECOURSE_INVESTIGATION", "fixed")
 # gracefully: search_knowledge returns a structured error and the planner
 # moves on; nothing else depends on it.
 KNOWLEDGE_ENABLED = os.environ.get("RECOURSE_KNOWLEDGE", "true").lower() == "true"
+
+# R5: courier tracking — "simulator" (default, honestly labeled) or
+# "aftership" (real HTTP, requires AFTERSHIP_API_KEY, fails loudly).
+TRACKING_PROVIDER = os.environ.get("RECOURSE_TRACKING", "simulator")
+AFTERSHIP_API_KEY = os.environ.get("AFTERSHIP_API_KEY", "")
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 LLM_MODEL = os.environ.get("RECOURSE_LLM_MODEL", "claude-sonnet-4-6")
 AI_MAX_TOKENS = 2000

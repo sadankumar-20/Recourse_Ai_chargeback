@@ -174,32 +174,26 @@ def _read_document(ro: ReadOnlyRepo, a: dict):
 
 
 def _fetch_tracking(ro: ReadOnlyRepo, a: dict):
-    """Simulated courier tracking system (provenance: simulator; the real
-    HTTP adapter arrives in R5). Deterministically reconstructs the courier's
-    own delivery record from world state: if the shipment reached
-    'delivered', the courier knows it — even when the merchant lost the POD
-    file. Read-only: materializing the confirmation as a document is the
-    coordination layer's job, never a tool's."""
-    rows = ro.select(
-        "SELECT s.awb, s.courier, s.ship_date, s.status, o.address, "
-        "o.customer_email FROM shipments s JOIN orders o ON o.id = s.order_id "
-        "WHERE s.awb = ?", (a["awb"],))
-    if not rows:
+    """Courier tracking via the configured provider (R5): the labeled
+    simulator (reconstructed read-only from world state) or the real
+    AfterShip HTTP adapter (provenance tracking_api). Materializing a
+    confirmation as a document remains the coordination layer's job."""
+    from .tracking import TrackingError, track_via_configured_provider
+    rows = ro.select("SELECT courier FROM shipments WHERE awb = ?",
+                     (a["awb"],))
+    courier = rows[0]["courier"] if rows else a["awb"].split("-")[0]
+    try:
+        record = track_via_configured_provider(ro, a["awb"], courier)
+    except TrackingError as e:
+        return {"error": str(e)}, []
+    if record is None:
         return {"error": f"courier has no record of AWB {a['awb']!r}"}, []
-    s = rows[0]
-    if s["status"] != "delivered":
-        return {"awb": s["awb"], "courier": s["courier"],
-                "status": s["status"],
-                "note": "no delivery confirmation available"},                [Provenance.SIMULATOR.value]
-    from datetime import datetime, timedelta
-    delivered_at = (datetime.fromisoformat(s["ship_date"])
-                    + timedelta(hours=72)).isoformat(timespec="seconds")
-    return {"awb": s["awb"], "courier": s["courier"], "status": "delivered",
-            "ship_date": s["ship_date"], "delivered_at": delivered_at,
-            "receiver": "".join(c for c in s["customer_email"].split("@")[0]
-                                if not c.isdigit()).replace(".", " ").title(),
-            "address": s["address"],
-            "confirmation": "courier tracking shows successful delivery"},            [Provenance.SIMULATOR.value]
+    data = record.to_dict()
+    if record.status == "delivered":
+        data["confirmation"] = "courier tracking shows successful delivery"
+    else:
+        data["note"] = "no delivery confirmation available"
+    return data, [record.provenance]
 
 
 def _search_knowledge(ro: ReadOnlyRepo, a: dict):
@@ -235,7 +229,8 @@ def _find_similar_cases(ro: ReadOnlyRepo, a: dict):
         r["admitted_keys"] = [k["evidence_key"] for k in keys]
     return {"similar_cases": rows, "count": len(rows),
             "note": "context only — precedent never overrides the gate or "
-                    "the decision engine"},            ([Provenance.SIMULATOR.value] if rows else [])
+                    "the decision engine"}, \
+           ([Provenance.SIMULATOR.value] if rows else [])
 
 
 TOOLS: dict[str, ToolSpec] = {t.name: t for t in (

@@ -56,6 +56,27 @@ class AnthropicClient:
                 "set. Export the key, or set RECOURSE_AI_PROVIDER=stub for "
                 "offline development.")
 
+    def complete_vision(self, prompt: str, image_b64: str,
+                        media_type: str) -> str:
+        """One vision call (R5): image + instruction -> plain text. The key
+        stays server-side; the caller receives only the transcription."""
+        import requests
+        resp = requests.post(
+            "https://api.anthropic.com/v1/messages",
+            headers={"x-api-key": self.api_key,
+                     "anthropic-version": "2023-06-01",
+                     "content-type": "application/json"},
+            json={"model": self.model, "max_tokens": 1024,
+                  "messages": [{"role": "user", "content": [
+                      {"type": "image", "source": {
+                          "type": "base64", "media_type": media_type,
+                          "data": image_b64}},
+                      {"type": "text", "text": prompt}]}]},
+            timeout=120)
+        resp.raise_for_status()
+        return "".join(b.get("text", "")
+                       for b in resp.json().get("content", []))
+
     def complete(self, prompt: str) -> AIResponse:
         import requests  # local import: only the real provider needs HTTP
         started = time.monotonic()

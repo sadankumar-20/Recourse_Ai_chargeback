@@ -512,3 +512,40 @@ resolved after a merchant upload and closed through the unchanged gate and
 decision engine, 11/11 duplicate uploads deduped, 11 money actions for 11
 cases, zero deadline violations, all chains valid. R2/R3 artifacts
 reproduced; frozen eval proven identical.
+
+## ADR-017 — Real tracking and vision, env-keyed and honestly labeled (R5)
+
+**Tracking behind one record shape.** RECOURSE_TRACKING = simulator
+(default; the R2 read-only reconstruction, provenance 'simulator') |
+aftership (real HTTP, AFTERSHIP_API_KEY required, loud failure, provenance
+'tracking_api'). The AfterShip adapter's transport is injectable, so URL
+construction, headers, delivered/in-transit/404/5xx parsing are fully tested
+offline; the live path only swaps in requests.get. Real-provider honesty:
+if the API returns no destination address, the materialized confirmation
+omits the address line — address_match simply isn't extractable and the
+completeness math handles it; we do not invent addresses. Materialized
+tracking documents now carry the RECORD'S provenance.
+
+**Vision transcription is untrusted input, by architecture.** Image uploads
+(png/jpg/webp) flow through Anthropic vision (AnthropicClient.complete_
+vision; keys server-side only) into a TEXT document with provenance
+'vision_transcribed' — from there the UNCHANGED gate verifies every claim
+(verbatim quote against the transcription, AWB vs shipments, pincode vs
+order). The proof is a test where a scripted vision client LIES about the
+pincode: the document links, the evidence FAILS, no money moves. Offline
+providers raise VisionUnavailable with actionable guidance — no fake OCR.
+The gate's case-attachment channel and the runner's preload now cover
+vision_transcribed alongside user_upload.
+
+**Connected/disconnected is a first-class API.** /health gained an
+integrations panel (ai, payments, tracking, vision, knowledge) reporting
+real | simulator | unavailable per surface, with zero key material in any
+response (tested).
+
+**Failures found:** my slice-replacement of fetch_tracking deleted the two
+R3 tool functions between it and TOOLS (caught by import failure across the
+suite — restored); a heredoc had collapsed R4 line continuations so two
+string patches silently missed (fixed line-wise against the real source);
+and the R4 "arrives in R5" placeholder assertion correctly broke when R5
+arrived (updated to assert the actionable message). Frozen eval and all
+R2-R4 artifacts re-proven identical after everything.

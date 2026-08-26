@@ -126,6 +126,23 @@ def create_app(db_path: str | Path, data_dir: str | Path | None = None,
                   for t in ("disputes", "cases", "actions")}
         return jsonify({
             "ok": True, "counts": counts,
+            "integrations": {
+                "ai": {"mode": "real" if config.AI_PROVIDER == "anthropic"
+                       else "simulator", "provider": config.AI_PROVIDER},
+                "payments": {"mode": "real" if config.PAYMENTS_ADAPTER
+                             == "razorpay_test" else "simulator",
+                             "provider": config.PAYMENTS_ADAPTER,
+                             "note": "dispute lifecycle is simulator-only "
+                                     "(test mode cannot create disputes)"},
+                "tracking": {"mode": "real" if config.TRACKING_PROVIDER
+                             == "aftership" else "simulator",
+                             "provider": config.TRACKING_PROVIDER},
+                "vision": {"mode": "real" if config.AI_PROVIDER
+                           == "anthropic" else "unavailable",
+                           "note": "image uploads require the Anthropic "
+                                   "vision path"},
+                "knowledge": {"mode": "local",
+                              "enabled": config.KNOWLEDGE_ENABLED}},
             "clock": now_dt().isoformat(timespec="seconds"),
             "clock_mode": "pinned_to_synthetic_world" if app.config["SIM_NOW"]
                           else "real_time",
@@ -371,8 +388,7 @@ def create_app(db_path: str | Path, data_dir: str | Path | None = None,
             raise ValueError("PDF extraction is not supported in this "
                              "environment yet — upload .txt or .eml")
         if name.endswith((".png", ".jpg", ".jpeg", ".webp")):
-            raise ValueError("image evidence needs vision transcription "
-                             "(arrives in R5) — upload .txt or .eml")
+            return None                       # image: handled by vision (R5)
         if not (name.endswith((".txt", ".eml"))
                 or (content_type or "") in _UPLOADABLE):
             raise ValueError("unsupported file type — upload .txt or .eml")
@@ -410,10 +426,26 @@ def create_app(db_path: str | Path, data_dir: str | Path | None = None,
             filename = body.get("filename", "upload.txt")
             content_type = body.get("content_type", "text/plain")
             raw = (body.get("text") or "").encode()
+        vision_used = False
         try:
             text = _parse_upload(filename, content_type, raw)
+            if text is None:                  # image path (R5)
+                import base64
+                from .ai.vision import (
+                    VisionUnavailable,
+                    transcribe_document_image,
+                )
+                media = {"png": "image/png", "jpg": "image/jpeg",
+                         "jpeg": "image/jpeg", "webp": "image/webp"}[
+                    str(filename).rsplit(".", 1)[-1].lower()]
+                try:
+                    tr = transcribe_document_image(
+                        base64.b64encode(raw).decode(), media, get_client())
+                except VisionUnavailable as e:
+                    return err(415, str(e))
+                text, vision_used = tr.text, True
         except ValueError as e:
-            code = 415 if "unsupported" in str(e) or "vision" in str(e)                 or "PDF" in str(e) else 400
+            code = 415 if "unsupported" in str(e) or "PDF" in str(e) else 400
             return err(code, str(e))
         kind = request.args.get("kind") or (request.form or {}).get("kind")             or ("email" if str(filename).lower().endswith(".eml") else "log")
         if kind not in ("email", "pod", "invoice", "log"):
@@ -425,14 +457,20 @@ def create_app(db_path: str | Path, data_dir: str | Path | None = None,
         if not duplicate:
             r.add_document(Document(
                 id=doc_id, case_id=case_id, type=DocumentType(kind),
-                raw_text=text, source=f"upload:{filename}",
+                raw_text=text,
+                source=f"upload:{filename}"
+                       + (" (vision-transcribed)" if vision_used else ""),
                 fetched_at=now_dt().isoformat(timespec="seconds"),
-                provenance=Provenance.USER_UPLOAD.value))
+                provenance=(Provenance.VISION_TRANSCRIBED.value
+                            if vision_used
+                            else Provenance.USER_UPLOAD.value)))
         r.append_audit(case_id, "DOCUMENT_UPLOADED", {
             "doc_id": doc_id, "filename": filename,
             "content_type": content_type, "kind": kind,
             "sha256": sha, "bytes": len(raw), "duplicate": duplicate,
-            "provenance": "user_upload",
+            "provenance": ("vision_transcribed" if vision_used
+                           else "user_upload"),
+            "vision_transcribed": vision_used,
             "note": "untrusted until it passes the same admissibility "
                     "checks as every other document"})
         if case.state is CaseState.NEEDS_INPUT and not duplicate:
@@ -441,7 +479,9 @@ def create_app(db_path: str | Path, data_dir: str | Path | None = None,
                 "satisfies": "the open needs_input request (resume to "
                              "continue the investigation)"})
         return jsonify({"doc_id": doc_id, "duplicate": duplicate,
-                        "provenance": "user_upload", "sha256": sha}), 201
+                        "provenance": ("vision_transcribed" if vision_used
+                                       else "user_upload"),
+                        "sha256": sha}), 201
 
     @app.get("/cases/<case_id>/documents")
     def case_documents(case_id):

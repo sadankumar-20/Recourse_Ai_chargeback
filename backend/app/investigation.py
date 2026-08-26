@@ -76,7 +76,8 @@ def run_investigation(repo: Repository, case: Case, dispute: Dispute, order,
     docs: dict[str, Document] = {}
     kb_citations: list[dict] = []
     for doc in repo.list_documents_for_case(case.id):
-        if doc.provenance == Provenance.USER_UPLOAD.value:
+        if doc.provenance in (Provenance.USER_UPLOAD.value,
+                              Provenance.VISION_TRANSCRIBED.value):
             docs[doc.id] = doc
             history.append({"tool": "read_document",
                             "args": {"doc_id": doc.id}, "ok": True,
@@ -164,18 +165,22 @@ def _collect_documents(repo: Repository, case: Case, order, result,
         doc_id = f"doc_track_{r['awb']}"
         existing = repo.get_document(doc_id)
         if existing is None:
-            text = (f"PROOF OF DELIVERY\nCourier: {r['courier']}\n"
-                    f"AWB: {r['awb']}\nDelivered: {r['delivered_at']}\n"
-                    f"Receiver: {r['receiver']}\n"
-                    f"Delivery OTP verified: NO\n"
-                    f"Address: {r['address']}\n"
-                    f"Source: courier tracking system (simulated), retrieved "
-                    f"during investigation\n")
+            prov = (result.provenance or [Provenance.SIMULATOR.value])[0]
+            origin = ("courier tracking API" if prov == "tracking_api"
+                      else "courier tracking system (simulated)")
+            lines = [f"PROOF OF DELIVERY", f"Courier: {r['courier']}",
+                     f"AWB: {r['awb']}", f"Delivered: {r['delivered_at']}"]
+            if r.get("receiver"):
+                lines.append(f"Receiver: {r['receiver']}")
+            lines.append("Delivery OTP verified: NO")
+            if r.get("address"):
+                lines.append(f"Address: {r['address']}")
+            lines.append(f"Source: {origin}, retrieved during investigation")
             existing = Document(
                 id=doc_id, case_id=case.id, type=DocumentType.POD,
-                raw_text=text, source=f"courier:{r['awb']}",
-                fetched_at=utc_now_iso(),
-                provenance=Provenance.SIMULATOR.value)
+                raw_text="\n".join(lines) + "\n",
+                source=f"courier:{r['awb']}", fetched_at=utc_now_iso(),
+                provenance=prov)
             repo.add_document(existing)
         docs[doc_id] = existing
 

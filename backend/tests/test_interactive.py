@@ -190,7 +190,10 @@ class TestUploads(InteractiveBase):
         self.assertEqual(post("a.txt", "text/plain", b"  ").status_code, 400)
         self.assertEqual(post("a.pdf", "application/pdf").status_code, 415)
         self.assertEqual(post("a.png", "image/png").status_code, 415)
-        self.assertIn("R5", post("a.png", "image/png").get_json()["error"])
+        # R5 fulfilled: without a vision-capable provider, images are refused
+        # with actionable configuration guidance, not a placeholder
+        self.assertIn("RECOURSE_AI_PROVIDER=anthropic",
+                      post("a.png", "image/png").get_json()["error"])
         self.assertEqual(post("a.zip", "application/zip").status_code, 415)
         self.assertEqual(self.client.post(
             "/cases/ghost/upload", json={"text": "x"}).status_code, 404)

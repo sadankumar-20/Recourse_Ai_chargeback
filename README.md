@@ -114,6 +114,17 @@ scope), ₹45,969 of it ground-truth-winnable. `evals/report.md` prices that
 coverage gap instead of hiding it; the dashboard's Evaluation tab renders it
 head-on.
 
+## Real integrations (R5)
+
+`RECOURSE_TRACKING=aftership` + `AFTERSHIP_API_KEY` switches courier
+tracking to real HTTP (provenance `tracking_api`); the default simulator
+stays honestly labeled. With `RECOURSE_AI_PROVIDER=anthropic`, image
+uploads (POD photos) are vision-transcribed into text documents (provenance
+`vision_transcribed`) that the unchanged gate then verifies field by field —
+a lying transcription produces inadmissible evidence, not a wrong decision
+(tested). `GET /health` reports per-surface connected/simulator status with
+no key material ever in a response.
+
 ## Honest integration map
 
 | Surface | Real or simulated |

@@ -248,8 +248,8 @@ def _doc_belongs_to_case(doc: Document, ctx: GateContext) -> str | None:
     (verbatim quote, AWB match, pincode, amounts) still applies to uploads."""
     if ctx.case is not None and doc.case_id not in (None, ctx.case.id):
         return f"document {doc.id} is attached to a different case ({doc.case_id})"
-    if doc.provenance == "user_upload" and ctx.case is not None \
-            and doc.case_id == ctx.case.id:
+    if doc.provenance in ("user_upload", "vision_transcribed") \
+            and ctx.case is not None and doc.case_id == ctx.case.id:
         return None
     for ship in ctx.shipments:
         if doc.id == ship.pod_doc_id or doc.source == f"courier:{ship.awb}":

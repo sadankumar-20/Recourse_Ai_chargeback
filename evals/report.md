@@ -5,7 +5,7 @@
 - Frozen dataset: seed 42, sim_now 2026-08-23T12:00:00+00:00
 - Playbook v1, thresholds v1, contest fee ₹500 (fee charged on LOST contests)
 - AI provider: stub (deterministic offline stub — see Limitations)
-- Run at 2026-08-26T04:42:45+00:00 (metadata only; metrics are deterministic)
+- Run at 2026-08-26T09:42:00+00:00 (metadata only; metrics are deterministic)
 
 ## Frozen dataset
 
@@ -64,7 +64,7 @@ Recourse fought 16 cases, conceded ₹716 deliberately, and escalated ₹153,559
 
 ## Handling time
 
-Median 0.0108s, avg 0.0118s, min 0.0026s, max 0.0227s per case (wall clock, offline stub provider). handling times are wall-clock with the configured AI provider; no manual-handling baseline exists in the dataset, so none is claimed.
+Median 0.0172s, avg 0.0226s, min 0.0039s, max 0.1306s per case (wall clock, offline stub provider). handling times are wall-clock with the configured AI provider; no manual-handling baseline exists in the dataset, so none is claimed.
 
 ## Scenario breakdown
 
