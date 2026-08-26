@@ -73,3 +73,16 @@ def test_case_detail_exposes_kb_citations(tmp_path):
     # API side of the popover: DRAFT_CREATED kb payload surfaces in detail.
     api = (Path(__file__).resolve().parents[1] / "app" / "api.py").read_text()
     assert "kb_citations" in api
+
+
+def test_landing_and_kpis_render_from_real_data_only():
+    assert "renderLanding" in JS and "INVESTIGATE" in JS
+    assert "revenue at risk" in JS and "atRisk" in JS
+    assert "reduce((s, c) => s + (c.amount" in JS   # computed, not hardcoded
+
+
+def test_metrics_page_shows_honest_v2_including_negative():
+    assert "net_money_delta_on_v1_labels" in JS
+    assert "label_caveat" in JS and "honest" in JS
+    api = (Path(__file__).resolve().parents[1] / "app" / "api.py").read_text()
+    assert "v2_metrics.json" in api

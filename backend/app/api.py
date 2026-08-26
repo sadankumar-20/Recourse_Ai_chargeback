@@ -348,7 +348,12 @@ def create_app(db_path: str | Path, data_dir: str | Path | None = None,
                 gap["amount_at_risk"] += c["amount"]
                 if c["ground_truth_action"] == "FIGHT":
                     gap["gt_winnable_amount"] += c["amount"]
-        return jsonify({"evaluation": artifact["metrics"],
+        v2 = None
+        v2_path = Path(__file__).resolve().parents[2] / "evals" \
+            / "v2_metrics.json"
+        if v2_path.exists():
+            v2 = json.loads(v2_path.read_text())
+        return jsonify({"evaluation": artifact["metrics"], "v2": v2,
                         "config": artifact["config"],
                         "meta": artifact["meta"],
                         "coverage_gaps": gaps})

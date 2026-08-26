@@ -316,3 +316,49 @@ button.cite:focus-visible { outline: 2px solid var(--amber); }
              background: var(--rule); overflow: hidden; }
 .conf .bar i { display: block; height: 100%; background: var(--verified); }
 .conf.low .bar i { background: var(--amber); }
+
+/* ============ R9 — premium identity ============ */
+:root { --paper:#FAF8F3; --panel:#FFFFFF; --ink:#16181D; --ink-soft:#6B6E76;
+  --rule:#E5E1D8; --brass:#A8722A; --display:var(--serif); }
+body { letter-spacing:.005em; }
+h1 { font:700 30px/1.15 var(--serif); letter-spacing:-.01em; }
+h2 { text-transform:uppercase; font:700 12px var(--mono); letter-spacing:.14em;
+     color:var(--ink-soft); border-bottom:1px solid var(--rule);
+     padding-bottom:6px; }
+.panel { border:1px solid var(--rule); box-shadow:0 1px 0 rgba(20,22,26,.04); }
+.stat .v { font:700 26px var(--serif); }
+.stat .k { text-transform:uppercase; letter-spacing:.1em; font-size:10px; }
+
+/* landing */
+.landing { max-width:840px; margin:8vh auto 0; }
+.landing .kicker { font:700 11px var(--mono); letter-spacing:.22em;
+  color:var(--brass); text-transform:uppercase; }
+.landing h1 { font-size:52px; margin:10px 0 14px; }
+.landing .lede { font:18px/1.65 var(--serif); color:var(--ink-soft);
+  max-width:620px; }
+.flow { display:flex; gap:0; margin:34px 0; border:1px solid var(--rule);
+  background:var(--panel); }
+.flow div { flex:1; padding:16px 10px; text-align:center;
+  font:700 11px var(--mono); letter-spacing:.12em; border-right:1px solid
+  var(--rule); }
+.flow div:last-child { border-right:0; }
+.flow b { display:block; font:700 20px var(--serif); margin-bottom:4px;
+  color:var(--brass); }
+.creed { margin:26px 0; font:15px/2 var(--mono); }
+.creed b { color:var(--brass); }
+.landing .actions { display:flex; gap:12px; }
+.kpis { display:grid; grid-template-columns:repeat(auto-fit,minmax(170px,1fr));
+  gap:12px; margin:16px 0 26px; }
+.kpi { background:var(--panel); border:1px solid var(--rule); padding:14px;
+  border-top:3px solid var(--rule); }
+.kpi.risk { border-top-color:var(--amber); }
+.kpi.good { border-top-color:var(--verified); }
+.kpi.bad { border-top-color:var(--inadmissible); }
+.kpi .v { font:700 24px var(--serif); }
+.kpi .k { font:10px var(--mono); text-transform:uppercase;
+  letter-spacing:.1em; color:var(--ink-soft); margin-top:3px; }
+.upstate { font:700 11px var(--mono); letter-spacing:.08em; margin-top:8px;
+  color:var(--brass); }
+.honest { border-left:4px solid var(--amber); }
+@media (max-width:720px){ .landing h1{font-size:34px} .flow{flex-wrap:wrap}
+  .flow div{min-width:33%} }

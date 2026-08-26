@@ -30,12 +30,35 @@ async function route() {
   try {
     if (view === "case" && arg) { await renderCase(arg); bindAsk(arg); }
     else await ({intake: renderIntake, overview: renderOverview,
-                 cases: renderQueue, metrics: renderMetrics}[view]
-                || renderIntake)();
+                 cases: renderQueue, metrics: renderMetrics,
+                 home: renderLanding}[view] || renderLanding)();
   } catch (e) { main.innerHTML = `<div class="error">${esc(e.message)}</div>`; }
   main.focus();
 }
 window.addEventListener("hashchange", route);
+
+/* ---------- landing ---------- */
+async function renderLanding() {
+  main.innerHTML = `<div class="landing">
+    <div class="kicker">Merchant revenue recovery</div>
+    <h1>AI that investigates before it acts.</h1>
+    <p class="lede">When a chargeback arrives, Recourse doesn't blindly
+      fight it. It assembles the fragments — payment, order, shipment,
+      courier record, policy, the customer's own words — verifies every
+      claim deterministically, and moves money only through a bounded,
+      audited executor.</p>
+    <div class="flow">
+      <div><b>1</b>INVESTIGATE</div><div><b>2</b>VERIFY</div>
+      <div><b>3</b>DECIDE</div><div><b>4</b>ACT</div><div><b>5</b>PROVE</div>
+    </div>
+    <div class="creed">AI investigates. <b>Evidence proves.</b> Policy
+      decides. <b>Execution acts.</b> Audit proves.</div>
+    <div class="actions">
+      <a class="btn primary" href="#/intake">Start an investigation</a>
+      <a class="btn" href="#/overview">Open operations</a>
+      <a class="btn" href="#/metrics">See the evaluation</a>
+    </div></div>`;
+}
 
 /* ---------- intake ---------- */
 async function renderIntake() {
@@ -259,6 +282,9 @@ function bindAsk(caseId) {
       $("#uplist").insertAdjacentHTML("beforeend",
         `<li>${esc(file.name)} \u2192 ${esc(r.doc_id)} ${prov(r.provenance)}
          ${r.duplicate ? "(already on file \u2014 deduplicated)" : ""}</li>`);
+      $("#up-note").innerHTML = `<span class="upstate">DOCUMENT RECEIVED
+        \u2192 stored ${prov(r.provenance)} \u2192 awaiting RESUME \u2192
+        the gate verifies before anything counts</span>`;
     } catch (e) {
       $("#uplist").insertAdjacentHTML("beforeend",
         `<li>\u2717 ${esc(file.name)}: ${esc(e.message)}</li>`);
@@ -379,13 +405,30 @@ function humanActions(c, caseId) {
 async function renderOverview() {
   const [{ cases }, h] = await Promise.all([api("/cases"), api("/health")]);
   const waiting = cases.filter((c) => c.state === "needs_input");
+  const open = cases.filter((c) => !["closed", "acted"].includes(c.state));
+  const atRisk = open.reduce((s, c) => s + (c.amount || 0), 0);
+  const resolvedFight = cases.filter((c) => c.state === "closed"
+    && c.decision === "FIGHT");
+  const contested = resolvedFight.reduce((s, c) => s + (c.amount || 0), 0);
+  const pending = cases.filter((c) => c.escalated)
+    .reduce((s, c) => s + (c.amount || 0), 0);
+  const auto = cases.length ? cases.filter((c) =>
+    ["closed", "acted"].includes(c.state)).length / cases.length : 0;
   main.innerHTML = `<h1>Operations</h1>
-    <div class="stats">
-      <div class="stat"><div class="v">${cases.length}</div><div class="k">disputes in play</div></div>
-      <div class="stat good"><div class="v">${cases.filter((c) => c.state === "closed").length}</div><div class="k">resolved</div></div>
-      <div class="stat"><div class="v">${waiting.length}</div><div class="k">waiting on you</div></div>
-      <div class="stat"><div class="v">${cases.filter((c) => c.escalated).length}</div><div class="k">human review</div></div>
-      <div class="stat warn"><div class="v">${cases.filter((c) => c.urgent).length}</div><div class="k">under 24h</div></div>
+    <div class="kpis">
+      <div class="kpi risk"><div class="v rupee">${rupee(atRisk)}</div>
+        <div class="k">revenue at risk (open)</div></div>
+      <div class="kpi good"><div class="v rupee">${rupee(contested)}</div>
+        <div class="k">contested via verified evidence</div></div>
+      <div class="kpi"><div class="v rupee">${rupee(pending)}</div>
+        <div class="k">pending human review</div></div>
+      <div class="kpi good"><div class="v">${Math.round(auto * 100)}%</div>
+        <div class="k">automation rate</div></div>
+      <div class="kpi ${cases.some((c) => c.urgent) ? "risk" : ""}">
+        <div class="v">${cases.filter((c) => c.urgent).length}</div>
+        <div class="k">deadline risk (&lt;24h)</div></div>
+      <div class="kpi"><div class="v">${waiting.length}</div>
+        <div class="k">needs your input</div></div>
     </div>
     <h2>Integrations</h2>
     <p class="mono">${Object.entries(h.integrations || {}).map(([k, v]) =>
@@ -422,6 +465,7 @@ async function renderQueue() {
 async function renderMetrics() {
   const m = await api("/metrics");
   const ev = m.evaluation, r = ev.money.recourse;
+  const v2 = m.v2;
   main.innerHTML = `<h1>Held-out evaluation</h1>
     <p class="sub">40 frozen disputes, never tuned on (seed ${esc(m.config.seed)}).</p>
     <div class="stats">
@@ -438,7 +482,26 @@ async function renderMetrics() {
         \u00b7 ${rupee(g.gt_winnable_amount)} winnable</div>
       <div class="muted">${esc(g.needs)}</div></div>`).join("")}
     <p class="mono">zero wrong fights \u00b7 zero wrong accepts \u00b7 escalation
-      precision (strict): ${esc(ev.automation.escalation_precision_strict)}</p>`;
+      precision (strict): ${esc(ev.automation.escalation_precision_strict)}</p>
+    ${!v2 ? "" : `<h2>Eval v2 \u2014 fixed vs agentic (run twice, byte-identical)</h2>
+    <div class="kpis">
+      <div class="kpi good"><div class="v">${v2.headline.fixed_escalations_recovered_by_agent}</div>
+        <div class="k">where the agent wins: escalations resolved</div></div>
+      <div class="kpi good"><div class="v">+${v2.headline.additional_evidence_admitted}</div>
+        <div class="k">additional gate-admitted exhibits</div></div>
+      <div class="kpi good"><div class="v">${v2.prompt_injection.results.filter((x) => x.blocked).length}/${v2.prompt_injection.attempts}</div>
+        <div class="k">prompt injections blocked</div></div>
+      <div class="kpi good"><div class="v">${v2.safety_totals.unsafe_actions}</div>
+        <div class="k">unsafe actions</div></div>
+      <div class="kpi bad"><div class="v rupee">\u2212${rupee(Math.abs(v2.headline.net_money_delta_on_v1_labels))}</div>
+        <div class="k">net on v1 labels (honest)</div></div>
+      <div class="kpi"><div class="v">${v2.recoverable_gap.entered_needs_input_and_resolved}/${v2.recoverable_gap.cases}</div>
+        <div class="k">recoverable gaps resolved</div></div>
+    </div>
+    <div class="panel honest"><h3>The negative number, explained</h3>
+      <div>${esc(v2.headline.label_caveat)} Where the fixed pipeline wins:
+      clean, complete cases \u2014 identical decisions at zero tool cost.
+      Where the agent wins: every gap the fixed path abandoned.</div></div>`}`;
 }
 
 route();
