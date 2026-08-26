@@ -219,9 +219,10 @@ def create_app(db_path: str | Path, data_dir: str | Path | None = None,
         if action and action.type == "contest":
             bundle = json.loads(action.request_json)
             if "representment" in bundle:
+                dc = steps.get("DRAFT_CREATED", {})
                 draft = {"text": bundle["representment"],
-                         "display_map": steps.get("DRAFT_CREATED", {})
-                                             .get("display_map", {})}
+                         "display_map": dc.get("display_map", {}),
+                         "kb_citations": dc.get("kb_citations", {})}
         chain = verify_audit_chain(r, case_id)
         hours = hours_left(dispute)
         admitted = sum(1 for e in r.list_evidence_for_case(case_id)

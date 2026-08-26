@@ -59,4 +59,36 @@ for scenario, did, state in seeded:
 print("\nSample timeline:")
 print(format_timeline(repo, f"case_{seeded[1][1]}"))
 repo.close()
+# R6: one live interactive case for the cockpit demo — courier blinded so
+# the agent asks the merchant for the POD (needs_input, upload, resume).
+from app.intake import submit_intake
+for did2 in split["dev"]:
+    if gt[did2]["scenario"] != datagen.MISSING_POD:
+        continue
+    d2 = repo2 = None
+    from app.store.repo import Repository as _R
+    repo2 = _R(DB)
+    d2 = repo2.get_dispute(did2)
+    if d2.reason_code.value not in pb.reason_codes \
+            or repo2.get_case_by_dispute(did2):
+        repo2.close(); continue
+    order2 = repo2.get_order_by_payment(d2.payment_id)
+    with repo2.conn:
+        repo2.conn.execute("UPDATE shipments SET status='in_transit' "
+                           "WHERE order_id = ?", (order2.id,))
+    res2 = submit_intake(
+        repo2, f"The customer says they never received order "
+               f"#{order2.id.removeprefix('ord_')}, but we dispatched it.",
+        get_client(), now=datetime.fromisoformat(split["sim_now"]))
+    from app.orchestrator import Orchestrator as _O
+    from app.tools.payments_adapter import SimulatorAdapter as _S
+    r6 = _O(repo2, _S(repo2), ai_client=get_client(), playbooks=pb,
+            now=datetime.fromisoformat(split["sim_now"]),
+            sleep=lambda s: None,
+            investigation_mode="agentic").run_case(res2.case.id)
+    print(f"  {res2.dispute.id}  interactive_needs_input     -> "
+          f"{r6.final_state.value}")
+    repo2.close()
+    break
+
 print("\nNow run: python3 scripts/serve.py")

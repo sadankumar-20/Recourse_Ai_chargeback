@@ -1,248 +1,373 @@
-/* Recourse dashboard. No frameworks, no build step: every value on screen
-   comes from the API — nothing is recomputed or invented client-side. */
+/* Recourse cockpit (R6). Dependency-free. Every fact on screen comes from
+   the API; the ledger is rendered from the audit hash chain; the countdown
+   ticks locally from a server-authoritative snapshot and re-syncs — the
+   backend remains the deadline authority regardless of anything here. */
 
-const $ = (sel, el = document) => el.querySelector(sel);
+const $ = (s, el = document) => el.querySelector(s);
 const main = $("#main");
-const rupee = (n) => "\u20b9" + Number(n).toLocaleString("en-IN");
+const rupee = (n) => "\u20b9" + Number(n || 0).toLocaleString("en-IN");
 const esc = (s) => String(s ?? "").replace(/[&<>"]/g,
   (c) => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
+const prov = (p) => p ? `<span class="prov ${esc(p)}">${esc(p).replace("_", " ")}</span>` : "";
 
 async function api(path, opts) {
-  const resp = await fetch(path, opts);
-  const body = await resp.json().catch(() => ({}));
-  if (!resp.ok) throw new Error(body.error || resp.status);
-  return body;
+  const r = await fetch(path, opts);
+  const b = await r.json().catch(() => ({}));
+  if (!r.ok) { const e = new Error(b.error || r.status); e.body = b; throw e; }
+  return b;
 }
 
 /* ---------- routing ---------- */
-const routes = {
-  overview: renderOverview,
-  cases: renderQueue,
-  metrics: renderMetrics,
-};
+let cleanup = [];
+function onLeave(fn) { cleanup.push(fn); }
 async function route() {
-  const hash = location.hash.replace(/^#\//, "") || "overview";
-  const [view, arg] = hash.split("/");
+  cleanup.forEach((f) => { try { f(); } catch (_) {} });
+  cleanup = [];
+  const [view, arg] = (location.hash.replace(/^#\//, "") || "intake").split("/");
   document.querySelectorAll("nav a").forEach((a) =>
     a.classList.toggle("active", a.dataset.nav === view));
   main.innerHTML = "<p class='muted'>Loading\u2026</p>";
   try {
-    if (view === "case" && arg) await renderCase(arg);
-    else await (routes[view] || renderOverview)();
-  } catch (e) {
-    main.innerHTML = `<div class="error">${esc(e.message)}</div>`;
-  }
+    if (view === "case" && arg) { await renderCase(arg); bindAsk(arg); }
+    else await ({intake: renderIntake, overview: renderOverview,
+                 cases: renderQueue, metrics: renderMetrics}[view]
+                || renderIntake)();
+  } catch (e) { main.innerHTML = `<div class="error">${esc(e.message)}</div>`; }
   main.focus();
 }
 window.addEventListener("hashchange", route);
 
-/* ---------- overview ---------- */
-async function renderOverview() {
-  const [{ cases }, health] = await Promise.all([
-    api("/cases"), api("/health")]);
-  const escalated = cases.filter((c) => c.escalated);
-  const closed = cases.filter((c) => c.state === "closed");
-  const urgent = cases.filter((c) => c.urgent);
-  const pending = escalated.reduce((s, c) => s + c.amount, 0);
-  const byDecision = {};
-  cases.forEach((c) => { const d = c.decision || "ESCALATED (pre-decision)";
-    byDecision[d] = (byDecision[d] || 0) + 1; });
-  main.innerHTML = `
-    <h1>Dispute operations</h1>
-    <p class="sub">Every number below is read from the live case store.</p>
-    <div class="stats">
-      <div class="stat"><div class="v">${cases.length}</div><div class="k">disputes in play</div></div>
-      <div class="stat good"><div class="v">${closed.length}</div><div class="k">resolved autonomously or by review</div></div>
-      <div class="stat"><div class="v">${escalated.length}</div><div class="k">waiting on a human</div></div>
-      <div class="stat"><div class="v rupee">${rupee(pending)}</div><div class="k">pending human action</div></div>
-      <div class="stat warn"><div class="v">${urgent.length}</div><div class="k">under 24h to deadline</div></div>
+/* ---------- intake ---------- */
+async function renderIntake() {
+  main.innerHTML = `<div class="hero">
+    <h1>Tell Recourse what happened.</h1>
+    <p class="sub">Describe the dispute in your own words, or paste the
+      customer's message. Recourse anchors it to your records and starts a
+      real investigation.</p>
+    <textarea id="story" placeholder="e.g. The customer says they never received order #0019, but our courier says it was delivered\u2026"></textarea>
+    <div class="hero-row">
+      <input type="text" id="payid" placeholder="pay_0019 (optional)">
+      <button class="btn voice" id="mic" aria-pressed="false" hidden>\ud83c\udf99 Dictate</button>
+      <button class="btn primary" id="go">Start investigation</button>
     </div>
-    <h2>Decisions</h2>
-    <p class="mono">${Object.entries(byDecision).map(([k, v]) => `${k}: ${v}`).join(" \u00b7 ") || "none yet"}</p>
-    <h2>Recent cases</h2>
-    ${queueTable(cases.slice(0, 8))}
-    <p class="notice">clock: ${esc(health.clock)} (${esc(health.clock_mode)}) \u00b7
-      AI provider: ${esc(health.ai_provider)} \u00b7 payments: ${esc(health.payments_provider)}</p>`;
-  bindRows();
-  $("#rail-foot").textContent =
-    `playbook ${health.playbook_version} \u00b7 ${health.counts.cases} cases`;
+    <p class="hint">Your words are stored verbatim as source material
+      ${prov("user_submitted")} \u00b7 the AI's reading of them is labeled an
+      untrusted interpretation \u00b7 the decision is always deterministic.</p>
+    <div class="interp" id="interp"></div></div>`;
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (SR) {
+    const mic = $("#mic"); mic.hidden = false;
+    let rec = null;
+    mic.onclick = () => {
+      if (rec) { rec.stop(); return; }
+      rec = new SR(); rec.lang = "en-IN"; rec.interimResults = false;
+      mic.setAttribute("aria-pressed", "true");
+      rec.onresult = (e) => { $("#story").value +=
+        (($("#story").value && " ") || "") + e.results[0][0].transcript; };
+      rec.onend = () => { mic.setAttribute("aria-pressed", "false"); rec = null; };
+      rec.start();
+    };
+  }
+  $("#go").onclick = async () => {
+    $("#go").disabled = true;
+    try {
+      const body = { text: $("#story").value };
+      if ($("#payid").value.trim()) body.payment_id = $("#payid").value.trim();
+      const r = await api("/intake", { method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body) });
+      location.hash = `#/case/${r.case_id}`;
+    } catch (e) {
+      const b = e.body || {};
+      $("#interp").innerHTML = `<div class="panel">
+        <h3>Recourse needs a little more</h3>
+        <div>${esc(e.message)}</div>
+        ${b.missing ? `<div class="mono">missing: ${esc(b.missing.join(", "))}</div>` : ""}
+        ${b.interpretation && b.interpretation.reason_code ? `
+          <div class="rule-line">how I read it: ${esc(b.interpretation.customer_claim || "")}
+          \u2192 <b>${esc(b.interpretation.reason_code)}</b>
+          ${confMeter(b.interpretation.confidence)}</div>` : ""}</div>`;
+      $("#go").disabled = false;
+    }
+  };
+}
+const confMeter = (c) => c == null ? "" :
+  `<span class="conf ${c < 0.7 ? "low" : ""}"><span class="bar">
+   <i style="width:${Math.round(c * 100)}%"></i></span>
+   <span class="mono">${Math.round(c * 100)}%</span></span>`;
+
+/* ---------- countdown (server-authoritative snapshot, local ticks) ---------- */
+function fmtCountdown(s) {
+  s = Math.max(0, Math.floor(s));
+  const d = Math.floor(s / 86400), h = Math.floor(s % 86400 / 3600),
+        m = Math.floor(s % 3600 / 60), sec = s % 60;
+  return (d ? d + "d " : "") + String(h).padStart(2, "0") + "h " +
+         String(m).padStart(2, "0") + "m " + String(sec).padStart(2, "0") + "s";
+}
+const statusOf = (s) => s <= 0 ? "EXPIRED" : s < 86400 ? "CRITICAL"
+                        : s < 172800 ? "WARNING" : "SAFE";
+function mountCountdown(el, snapshot, onExpire) {
+  let base = performance.now(), snap = snapshot, expired = false;
+  function tick() {
+    const rem = snap.remaining_seconds - (performance.now() - base) / 1000;
+    const st = snap.status === "EXPIRED" ? "EXPIRED" : statusOf(rem);
+    el.className = "countdown " + st;
+    el.innerHTML = `<div class="label">DEADLINE \u2014 ${st}</div>
+      <div class="clock">${st === "EXPIRED" ? "EXPIRED" : fmtCountdown(rem) + " remaining"}</div>
+      <div class="meta">respond by ${esc(snap.respond_by)} \u00b7 server is the
+        time authority</div>`;
+    if (st === "EXPIRED" && !expired) { expired = true; onExpire && onExpire(); }
+  }
+  tick();
+  const t = setInterval(tick, 1000);
+  const sync = setInterval(async () => {
+    try { snap = await api(el.dataset.href); base = performance.now(); }
+    catch (_) {}
+  }, 30000);
+  onLeave(() => { clearInterval(t); clearInterval(sync); });
 }
 
-/* ---------- queue ---------- */
-function queueTable(cases) {
-  if (!cases.length) return "<p class='muted'>No cases yet. Send a dispute webhook to begin.</p>";
-  return `<table><thead><tr>
-    <th>case</th><th>amount</th><th>reason</th><th>decision</th>
-    <th>confidence</th><th>deadline</th><th>status</th></tr></thead><tbody>
-    ${cases.map((c) => `
-      <tr class="row ${c.urgent ? "urgent" : ""}" data-id="${esc(c.case_id)}">
-        <td class="mono">${esc(c.dispute_id)}</td>
-        <td class="rupee">${rupee(c.amount)}</td>
-        <td class="mono">${esc(c.reason_code)}</td>
-        <td>${c.decision ? esc(c.decision) : "<span class='muted'>\u2014</span>"}</td>
-        <td class="mono">${c.link_confidence ?? "\u2014"}</td>
-        <td class="mono">${c.hours_left}h</td>
-        <td><span class="badge ${esc(c.state)}">${esc(c.state)}</span>
-            ${c.urgent ? '<span class="badge urgent">URGENT</span>' : ""}</td>
-      </tr>`).join("")}</tbody></table>`;
-}
-function bindRows() {
-  document.querySelectorAll("tr.row").forEach((tr) =>
-    tr.addEventListener("click", () => (location.hash = `#/case/${tr.dataset.id}`)));
-}
-async function renderQueue() {
-  const { cases, total } = await api("/cases");
-  main.innerHTML = `<h1>Case queue</h1>
-    <p class="sub">${total} cases, urgent first. Click a row to open its docket.</p>
-    ${queueTable(cases)}`;
-  bindRows();
-}
-
-/* ---------- case detail ---------- */
+/* ---------- case cockpit ---------- */
+const AGENT_STATES = {
+  needs_input: ["waiting", "waiting for the merchant"],
+  closed: ["done", "resolved"], acted: ["done", "executed"],
+  escalated: ["stopped", "handed to a human"],
+};
 async function renderCase(caseId) {
   const [c, ev, audit] = await Promise.all([
-    api(`/cases/${caseId}`),
-    api(`/cases/${caseId}/evidence`),
+    api(`/cases/${caseId}`), api(`/cases/${caseId}/evidence`),
     api(`/cases/${caseId}/audit`)]);
+  const [pill, pillText] = AGENT_STATES[c.state] || ["working", "investigating"];
   main.innerHTML = `
-    <p><a href="#/cases">\u2190 queue</a></p>
-    <div class="docket">
+    <div class="casebar">
+      <a href="#/cases">\u2190</a>
       <span class="dnum">DISPUTE #${esc(c.dispute_id)}</span>
-      <span class="damt">${rupee(c.amount)}</span>
+      <span class="damt rupee">${rupee(c.amount)}</span>
       <span class="badge neutral">${esc(c.reason_code)}</span>
-      <span class="badge ${esc(c.state)}">${esc(c.state)}</span>
-      <span class="mono">${c.hours_left}h to deadline</span>
+      ${prov(c.dispute_provenance)}
+      <span class="agent-pill ${pill}"><span class="dot"></span>
+        agent: ${esc(pillText)}</span>
       ${c.decision ? `<span class="stamp ${c.decision === "FIGHT" ? "pass" : "fail"}">${esc(c.decision)}</span>` : ""}
+      <div class="countdown" id="cd" data-href="/cases/${esc(caseId)}/deadline"></div>
     </div>
-    ${c.escalation ? escalationPanel(c) : ""}
+    ${c.needs_input ? askPanel(c.needs_input) : ""}
+    ${c.escalation ? `<div class="panel escalation"><h3>HUMAN REVIEW REQUIRED</h3>
+       <pre>${esc(c.escalation.merchant_summary)}</pre>
+       <div class="actions" id="hactions"></div>
+       <div class="notice" id="act-result"></div></div>` : ""}
     <div class="cols">
       <section>
+        <h2>Investigation ledger <span class="muted"
+          style="font:11px var(--mono)">rendered from the tamper-evident
+          audit chain</span></h2>
+        <div class="ledger" id="ledger">${ledger(audit.entries)}</div>
         <h2>Evidence exhibits</h2>
-        <p class="muted">${esc(ev.note)}</p>
         ${ev.evidence.length ? ev.evidence.map(exhibit).join("")
-          : "<p class='muted'>No evidence was extracted — the case escalated before extraction.</p>"}
+          : "<p class='muted'>No evidence yet.</p>"}
       </section>
       <section>
         ${c.decision_math ? mathPanel(c) : ""}
         ${c.draft ? draftPanel(c) : ""}
         ${c.execution ? execPanel(c) : ""}
+        <div class="panel"><h3>Audit integrity</h3>
+          <span class="chainbadge ${audit.chain.valid ? "ok" : "bad"}">
+          ${audit.chain.valid ? "\u2713 CHAIN VERIFIED (" + audit.chain.entries + " entries)"
+            : "\u2717 TAMPER DETECTED \u00b7 entry " + audit.chain.broken_at}</span></div>
       </section>
-    </div>
-    <h2>Audit timeline
-      <span class="chainbadge ${audit.chain.valid ? "ok" : "bad"}">
-        ${audit.chain.valid ? "\u2713 CHAIN VERIFIED" :
-          `\u2717 TAMPER DETECTED \u00b7 entry ${audit.chain.broken_at}`}</span></h2>
-    <ul class="timeline">
-      ${audit.entries.map((e) => `<li>
-        <span class="t">${esc(e.at)}</span>
-        <span class="s">${esc(e.step)}</span>
-        <span>${esc(summarize(e))}</span></li>`).join("")}
-    </ul>`;
+    </div>`;
+  mountCountdown($("#cd"), c.deadline, () => {
+    document.querySelectorAll(".actions .btn, #resume-btn").forEach(
+      (b) => { b.disabled = true; });
+    const n = $("#act-result");
+    if (n) n.textContent = "Deadline expired \u2014 actions disabled (the " +
+      "server rejects them regardless).";
+  });
+  if (c.escalation && c.deadline.status !== "EXPIRED") humanActions(c, caseId);
   bindCitations(c);
-  bindActions(c, caseId);
+  bindKb(c);
+  if (!["closed", "acted", "escalated"].includes(c.state)) {
+    const poll = setInterval(async () => {
+      const fresh = await api(`/cases/${caseId}`).catch(() => null);
+      if (fresh && fresh.state !== c.state) {
+        clearInterval(poll); renderCase(caseId).then(() => bindAsk(caseId));
+      }
+    }, 4000);
+    onLeave(() => clearInterval(poll));
+  }
+}
+
+/* the Investigation Ledger — audit steps -> typed, ordered entries */
+const LEDGER_MAP = {
+  CASE_SUBMITTED: (p) => ["PLAN", "", `merchant reported the dispute in their own words \u2014 interpretation: ${p.interpretation ? esc(p.interpretation.reason_code) : ""} ${p.interpretation ? "(" + Math.round((p.interpretation.confidence || 0) * 100) + "% confidence, untrusted)" : ""}`],
+  CASE_CREATED: (p) => ["PLAN", "", `dispute received \u2014 ${rupee(p.amount)}, ${esc(p.reason_code)}, ${esc(p.hours_left)}h to deadline`],
+  AGENT_PLAN: (p) => ["PLAN", "", `investigation planned: establish ${esc((p.checklist || []).join(", "))} \u00b7 budget ${p.limits ? esc(p.limits.tool_budget) : ""} tool calls`],
+  LINK_COMPLETED: (p) => ["CHECK", "", `order linked via ${esc(p.method)} \u2192 ${esc(p.order_id)} (confidence ${esc(p.confidence)})`],
+  TOOL_CALL: (p) => ["TOOL", "t-tool", `${esc(p.tool)}(${Object.values(p.args || {}).map(esc).join(", ")}) ${p.ok ? "" : "\u2192 " + esc(p.error)}`],
+  AGENT_OBSERVATION: (p) => ["OBSERVATION", "", `${esc(p.goal)} \u2014 ${esc(String(p.observation || "").slice(0, 110))} ${(p.provenance || []).map(prov).join("")}`],
+  EVIDENCE_EXTRACTED: (p) => ["CHECK", "", `${esc(p.count)} evidence candidates proposed: ${esc((p.keys || []).join(", "))}`],
+  EVIDENCE_ADMITTED: (p) => ["CHECK", "t-check", `gate ADMITTED ${(p.ids || []).length} exhibit(s) \u2014 verbatim + system-of-record verified`],
+  EVIDENCE_REJECTED: (p) => ["REJECTED", "t-fail", `gate REJECTED ${(p.items || []).length}: ${esc((p.items || []).map((i) => i.reason).join("; ").slice(0, 110))}`],
+  AGENT_NEEDS_INPUT: (p) => ["ASK", "t-ask", `agent asks the merchant: ${esc(p.request_to_user)}`],
+  DOCUMENT_UPLOADED: (p) => ["OBSERVATION", "", `merchant provided ${esc(p.filename)} (${esc(p.kind)}) ${prov(p.provenance)} \u00b7 sha ${esc(String(p.sha256 || "").slice(0, 10))}\u2026`],
+  USER_INPUT_RECEIVED: () => ["RESUME", "", "the requested input arrived"],
+  INVESTIGATION_RESUMED: (p) => ["RESUME", "", `investigation resumed with ${(p.uploads_attached || []).length} merchant document(s), ${esc(p.hours_left)}h left`],
+  DECISION_MADE: (p) => ["DECISION", "t-decide", `${esc(p.action)} via ${esc(p.rule_fired)} \u2014 EV(fight) ${rupee(p.ev_fight)} vs EV(accept) ${rupee(p.ev_accept)}`],
+  DRAFT_VALIDATED: () => ["CHECK", "t-check", "representment citations validated \u2014 every factual sentence cites an admitted exhibit"],
+  ACTION_SUBMITTED: (p) => ["ACTION", "t-decide", `${esc(p.action)} executed via ${esc(p.adapter)}${p.simulated ? " [SIMULATED]" : ""} by ${esc(p.actor)} \u00b7 idempotency ${esc(p.idempotency_key)}`],
+  HUMAN_APPROVED: (p) => ["ACTION", "", `human approval: ${esc(p.action)} by ${esc(p.actor_name)}`],
+  CASE_ESCALATED: (p) => ["ASK", "t-ask", `escalated to a human: ${esc(String(p.reason || "").slice(0, 110))}`],
+  CASE_CLOSED: (p) => ["DECISION", "t-decide", `case closed \u2014 dispute ${esc(p.dispute_status)}`],
+};
+function ledger(entries) {
+  let i = 0;
+  return entries.map((e) => {
+    const f = LEDGER_MAP[e.step] || (e.step.startsWith("DEADLINE_")
+      ? (p) => ["DEADLINE", "", `deadline ${esc(e.step.replace("DEADLINE_", "").toLowerCase())} \u2014 ${esc(p.remaining_seconds)}s remaining`]
+      : null);
+    if (!f) return "";
+    const [chip, cls, text] = f(e.payload || {});
+    return `<div class="entry ${cls || ""}" style="animation-delay:${Math.min(i++ * 60, 1200)}ms">
+      <span class="chip ${chip}">${chip}</span><span class="etext">${text}</span>
+      <div class="emeta">${esc(e.at)} \u00b7 #${e.seq} \u00b7 ${esc(String(e.entry_hash))}\u2026</div></div>`;
+  }).join("");
+}
+
+function askPanel(req) {
+  return `<div class="panel ask-panel"><h3>What the agent needs from you</h3>
+    <div>${esc(req.action)}</div>
+    <div class="mono" style="margin-top:6px">missing: ${esc((req.requested || []).join(", "))}
+      \u00b7 status: ${esc(req.status)}</div>
+    <label class="dropzone" id="dz">Drop a .txt / .eml / POD photo here, or
+      click to choose a file
+      <input type="file" id="fpick" accept=".txt,.eml,.png,.jpg,.jpeg,.webp"></label>
+    <ul class="uplist" id="uplist"></ul>
+    <div class="actions"><button class="btn primary" id="resume-btn">Resume
+      investigation</button></div>
+    <div class="notice" id="up-note">uploads are untrusted until they pass the
+      same admissibility checks as every other document</div></div>`;
+}
+function bindAsk(caseId) {
+  const dz = $("#dz"), pick = $("#fpick");
+  if (!dz) return;
+  const send = async (file) => {
+    const kind = /pod|delivery/i.test(file.name) || file.type.startsWith("image")
+      ? "pod" : file.name.endsWith(".eml") ? "email" : "log";
+    const fd = new FormData(); fd.append("file", file);
+    try {
+      const r = await api(`/cases/${caseId}/upload?kind=${kind}`,
+                          { method: "POST", body: fd });
+      $("#uplist").insertAdjacentHTML("beforeend",
+        `<li>${esc(file.name)} \u2192 ${esc(r.doc_id)} ${prov(r.provenance)}
+         ${r.duplicate ? "(already on file \u2014 deduplicated)" : ""}</li>`);
+    } catch (e) {
+      $("#uplist").insertAdjacentHTML("beforeend",
+        `<li>\u2717 ${esc(file.name)}: ${esc(e.message)}</li>`);
+    }
+  };
+  dz.addEventListener("dragover", (e) => { e.preventDefault(); dz.classList.add("hover"); });
+  dz.addEventListener("dragleave", () => dz.classList.remove("hover"));
+  dz.addEventListener("drop", (e) => { e.preventDefault(); dz.classList.remove("hover");
+    [...e.dataTransfer.files].forEach(send); });
+  pick.addEventListener("change", () => [...pick.files].forEach(send));
+  $("#resume-btn").onclick = async () => {
+    $("#resume-btn").disabled = true;
+    try { await api(`/cases/${caseId}/resume`, { method: "POST" }); }
+    catch (e) { $("#up-note").textContent = "Server refused: " + e.message; }
+    renderCase(caseId).then(() => bindAsk(caseId));
+  };
 }
 
 function exhibit(e) {
   const verdict = e.verdict === "PASS" ? "pass" : "fail";
   return `<article class="exhibit ${verdict}" id="ex-${esc(e.id)}">
-    <span class="tag">[${esc(displayIdOf(e.id))}]</span>
+    <span class="tag">[${esc(e.id.split("-").pop())}]</span>
     <span class="ekey">${esc(e.key)}</span>
+    ${e.source ? prov(e.source.provenance || "") : ""}
     <span class="stamp ${verdict}">${esc(e.verdict)}</span>
     <blockquote>${esc(e.quoted_span)}</blockquote>
-    <div class="src">source: ${e.source ? `${esc(e.source.id)} (${esc(e.source.type)}, ${esc(e.source.source)})` : "\u2014"}
-      ${Object.keys(e.fields).length ? " \u00b7 fields: " + esc(JSON.stringify(e.fields)) : ""}</div>
+    <div class="src">source: ${e.source ? `${esc(e.source.id)} (${esc(e.source.type)}, ${esc(e.source.source)})` : "\u2014"}</div>
     ${e.checks.length ? `<ul class="checks">${e.checks.map((k) =>
       `<li class="${k.passed ? "ok" : "bad"}">${esc(k.name)}${k.detail && !k.passed ? " \u2014 " + esc(k.detail) : ""}</li>`).join("")}</ul>` : ""}
     ${e.fail_reason ? `<div class="fail-reason">${esc(e.fail_reason)}</div>` : ""}
   </article>`;
 }
-const displayIdOf = (fullId) => fullId.split("-").pop();
 
 function mathPanel(c) {
   const m = c.decision_math;
-  return `<div class="panel"><h3>Decision math (backend-authoritative)</h3>
+  return `<div class="panel"><h3>Decision math (deterministic, versioned)</h3>
     <table class="math">
       <tr><td>Potential recovery</td><td class="rupee">${rupee(c.amount)}</td></tr>
-      <tr><td>Probability of success</td><td>${m.p_win}</td></tr>
-      <tr><td>Evidence completeness</td><td>${m.completeness}</td></tr>
+      <tr><td>p(win) \u00b7 playbook band</td><td>${esc(m.p_win)}</td></tr>
+      <tr><td>Evidence completeness</td><td>${esc(m.completeness)}</td></tr>
       <tr><td>EV(fight)</td><td class="rupee">${rupee(m.ev_fight)}</td></tr>
       <tr><td>EV(accept)</td><td class="rupee">${rupee(m.ev_accept)}</td></tr>
-      <tr class="total"><td>Decision</td><td>${esc(m.action)}</td></tr>
-    </table>
-    <div class="rule-line">rule: ${esc(m.rule_fired)} \u00b7 playbook ${esc(m.playbook_version)} \u00b7 thresholds ${esc(m.thresholds_version)}</div>
-    ${m.reasons.map((r) => `<div class="rule-line">\u2022 ${esc(r)}</div>`).join("")}
-  </div>`;
+      <tr class="total"><td>Decision</td><td>${esc(m.action)}</td></tr></table>
+    <div class="rule-line">rule: ${esc(m.rule_fired)} \u00b7 ${esc(m.playbook_version)} / ${esc(m.thresholds_version)}</div>
+    ${(m.reasons || []).map((r) => `<div class="rule-line">\u2022 ${esc(r)}</div>`).join("")}</div>`;
 }
-
 function draftPanel(c) {
-  const withCites = esc(c.draft.text).replace(/\[(E\d+)\]/g,
-    (_, id) => `<button class="cite" data-e="${id}">[${id}]</button>`);
+  let t = esc(c.draft.text)
+    .replace(/\[(E\d+)\]/g, (_, id) => `<button class="cite" data-e="${id}">[${id}]</button>`)
+    .replace(/\[(KB\d+)\]/g, (_, id) => `<button class="kbcite" data-kb="${id}">[${id}]</button>`);
   return `<div class="panel"><h3>Representment (citation-locked)</h3>
-    <div class="draft">${withCites}</div>
-    <div class="notice">every factual sentence must cite an admitted exhibit;
-    the deterministic validator rejected anything else before submission</div></div>`;
+    <div class="draft">${t}</div><div id="kbpop"></div>
+    <div class="notice">[E#] = gate-admitted exhibit \u00b7 [KB#] = verbatim-verified
+      policy citation \u00b7 a deterministic validator rejected anything else</div></div>`;
 }
-
+function bindKb(c) {
+  const map = (c.draft && c.draft.kb_citations) || {};
+  document.querySelectorAll("button.kbcite").forEach((b) =>
+    b.addEventListener("click", () => {
+      const k = map[b.dataset.kb];
+      $("#kbpop").innerHTML = !k ? "" : `<div class="kbpop">
+        \u201c${esc(k.quote)}\u201d<br>
+        <span class="src">\u2014 ${esc(k.source_id)}:${esc(k.chunk_id)}
+        (${esc(k.document_version)}) ${prov("kb_local")} \u00b7 verified verbatim
+        against the source chunk</span></div>`;
+    }));
+}
 function bindCitations(c) {
   const map = (c.draft && c.draft.display_map) || {};
   document.querySelectorAll("button.cite").forEach((b) =>
     b.addEventListener("click", () => {
-      const full = map[b.dataset.e];
-      const el = full && document.getElementById(`ex-${full}`);
+      const el = map[b.dataset.e] && document.getElementById(`ex-${map[b.dataset.e]}`);
       if (!el) return;
       el.scrollIntoView({ behavior: "smooth", block: "center" });
-      el.classList.remove("flash"); void el.offsetWidth;
-      el.classList.add("flash");
+      el.classList.remove("flash"); void el.offsetWidth; el.classList.add("flash");
     }));
 }
-
 function execPanel(c) {
   const x = c.execution;
   return `<div class="panel"><h3>Execution</h3>
     <div class="mono">${esc(x.type)} by ${esc(x.actor)} \u00b7 ${esc(x.at)}</div>
-    <div class="mono">idempotency key: ${esc(x.idempotency_key)}
-      (one money action per dispute, ever)</div>
-    <div class="mono">${x.response.simulated ? "SIMULATED \u2014 labeled, not a real Razorpay call" : "razorpay_test"}
-      \u00b7 status: ${esc(x.response.data && x.response.data.status)}</div></div>`;
+    <div class="mono">idempotency: ${esc(x.idempotency_key)} (one money action
+      per dispute, ever)</div>
+    <div class="mono">${x.response.simulated ? "SIMULATED \u2014 labeled" : "real adapter"}</div></div>`;
 }
-
-function escalationPanel(c) {
+function humanActions(c, caseId) {
   const allowed = c.allowed_human_actions || [];
-  return `<div class="panel escalation"><h3>HUMAN REVIEW REQUIRED</h3>
-    <pre>${esc(c.escalation.merchant_summary)}</pre>
-    <div class="actions">
-      ${allowed.includes("FIGHT") ? '<button class="btn fight" data-act="FIGHT">Approve fight</button>' : ""}
-      ${allowed.includes("ACCEPT") ? '<button class="btn accept" data-act="ACCEPT">Accept dispute</button>' : ""}
-      ${allowed.includes("REJECT") ? '<button class="btn reject" data-act="REJECT">Reject / close</button>' : ""}
-    </div>
-    <div class="notice">only actions the backend will allow are shown; the
-    server re-checks the deadline and evidence either way</div>
-    <div class="notice" id="act-result"></div></div>`;
-}
-
-function bindActions(c, caseId) {
-  document.querySelectorAll(".actions .btn").forEach((b) =>
+  $("#hactions").innerHTML =
+    (allowed.includes("FIGHT") ? '<button class="btn fight" data-act="FIGHT">Approve fight</button>' : "") +
+    (allowed.includes("ACCEPT") ? '<button class="btn accept" data-act="ACCEPT">Accept dispute</button>' : "") +
+    (allowed.includes("REJECT") ? '<button class="btn reject" data-act="REJECT">Reject / close</button>' : "");
+  document.querySelectorAll("#hactions .btn").forEach((b) =>
     b.addEventListener("click", async () => {
-      const act = b.dataset.act;
-      const actor = prompt("Your reviewer name (recorded in the audit chain):");
+      const actor = prompt("Reviewer name (recorded in the audit chain):");
       if (!actor) return;
       b.disabled = true;
       try {
-        if (act === "REJECT") {
-          const reason = prompt("Reason for closing without action:");
+        if (b.dataset.act === "REJECT") {
+          const reason = prompt("Reason:");
           if (!reason) { b.disabled = false; return; }
-          await api(`/cases/${caseId}/reject`, {
-            method: "POST", headers: { "Content-Type": "application/json" },
+          await api(`/cases/${caseId}/reject`, { method: "POST",
+            headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ actor, reason }) });
         } else {
-          const r = await api(`/cases/${caseId}/approve`, {
-            method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ action: act, actor }) });
-          if (r.duplicate)
-            $("#act-result").textContent =
-              "Already executed \u2014 the original action was returned (idempotent).";
+          await api(`/cases/${caseId}/approve`, { method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: b.dataset.act, actor }) });
         }
-        await renderCase(caseId);
+        renderCase(caseId).then(() => bindAsk(caseId));
       } catch (e) {
         $("#act-result").textContent = "Refused by the server: " + e.message;
         b.disabled = false;
@@ -250,81 +375,70 @@ function bindActions(c, caseId) {
     }));
 }
 
-function summarize(e) {
-  const p = e.payload;
-  switch (e.step) {
-    case "CASE_CREATED": return `${rupee(p.amount)} ${p.reason_code} (${p.hours_left}h left)`;
-    case "LINK_COMPLETED": return `${p.method} \u2192 ${p.order_id} (conf ${p.confidence})`;
-    case "GATHER_COMPLETED": return `${(p.documents || []).length} documents`;
-    case "EVIDENCE_EXTRACTED": return `${p.count} candidates ${JSON.stringify(p.keys)}`;
-    case "EVIDENCE_ADMITTED": return `${(p.ids || []).length} admitted`;
-    case "EVIDENCE_REJECTED": return (p.items || []).map((i) => i.reason).join("; ").slice(0, 90);
-    case "DECISION_MADE": return `${p.action} via ${p.rule_fired} (EV fight ${rupee(p.ev_fight)})`;
-    case "DRAFT_VALIDATED": return "citations clean";
-    case "ACTION_SUBMITTED": return `${p.action} via ${p.adapter}${p.simulated ? " [SIMULATED]" : ""} by ${p.actor}`;
-    case "ACTION_DUPLICATE": return `attempted ${p.attempted_action}; original ${p.original_action_type} returned`;
-    case "HUMAN_APPROVED": return `${p.action} by ${p.actor_name}`;
-    case "CASE_REJECTED": return `${p.reason} \u2014 by ${p.actor_name}`;
-    case "CASE_ESCALATED": return (p.reason || "").slice(0, 90);
-    case "CASE_CLOSED": return `dispute ${p.dispute_status}`;
-    default: return "";
-  }
+/* ---------- overview / queue / metrics ---------- */
+async function renderOverview() {
+  const [{ cases }, h] = await Promise.all([api("/cases"), api("/health")]);
+  const waiting = cases.filter((c) => c.state === "needs_input");
+  main.innerHTML = `<h1>Operations</h1>
+    <div class="stats">
+      <div class="stat"><div class="v">${cases.length}</div><div class="k">disputes in play</div></div>
+      <div class="stat good"><div class="v">${cases.filter((c) => c.state === "closed").length}</div><div class="k">resolved</div></div>
+      <div class="stat"><div class="v">${waiting.length}</div><div class="k">waiting on you</div></div>
+      <div class="stat"><div class="v">${cases.filter((c) => c.escalated).length}</div><div class="k">human review</div></div>
+      <div class="stat warn"><div class="v">${cases.filter((c) => c.urgent).length}</div><div class="k">under 24h</div></div>
+    </div>
+    <h2>Integrations</h2>
+    <p class="mono">${Object.entries(h.integrations || {}).map(([k, v]) =>
+      `${esc(k)}: <b>${esc(v.mode)}</b>`).join(" \u00b7 ")}</p>
+    <h2>Recent</h2>${queueTable(cases.slice(0, 10))}`;
+  bindRows();
+  $("#rail-foot").textContent =
+    `playbook ${h.playbook_version} \u00b7 clock ${h.clock_mode}`;
 }
-
-/* ---------- metrics ---------- */
+function queueTable(cases) {
+  if (!cases.length) return "<p class='muted'>No cases yet \u2014 start one from New investigation.</p>";
+  return `<table><thead><tr><th>case</th><th>amount</th><th>reason</th>
+    <th>agent</th><th>deadline</th><th>status</th></tr></thead><tbody>
+    ${cases.map((c) => `<tr class="row ${c.urgent ? "urgent" : ""}" data-id="${esc(c.case_id)}">
+      <td class="mono">${esc(c.dispute_id)}</td>
+      <td class="rupee">${rupee(c.amount)}</td>
+      <td class="mono">${esc(c.reason_code)}</td>
+      <td>${c.decision ? esc(c.decision) : c.state === "needs_input"
+        ? '<span class="badge urgent">needs you</span>' : "investigating"}</td>
+      <td class="mono">${esc(c.hours_left)}h</td>
+      <td><span class="badge ${esc(c.state)}">${esc(c.state)}</span></td>
+    </tr>`).join("")}</tbody></table>`;
+}
+function bindRows() {
+  document.querySelectorAll("tr.row").forEach((tr) =>
+    tr.addEventListener("click", () => (location.hash = `#/case/${tr.dataset.id}`)));
+}
+async function renderQueue() {
+  const { cases, total } = await api("/cases");
+  main.innerHTML = `<h1>Case queue</h1><p class="sub">${total} cases, urgent
+    first.</p>${queueTable(cases)}`;
+  bindRows();
+}
 async function renderMetrics() {
   const m = await api("/metrics");
-  const ev = m.evaluation, money = ev.money, r = money.recourse;
-  const gaps = Object.entries(m.coverage_gaps || {});
-  main.innerHTML = `
-    <h1>Held-out evaluation</h1>
-    <p class="sub">40 frozen disputes, never used for tuning. Read from the
-      committed Stage-9 artifact (${esc(m.config.sim_now)}, seed ${m.config.seed},
-      provider ${esc(m.meta.ai_provider)}).</p>
+  const ev = m.evaluation, r = ev.money.recourse;
+  main.innerHTML = `<h1>Held-out evaluation</h1>
+    <p class="sub">40 frozen disputes, never tuned on (seed ${esc(m.config.seed)}).</p>
     <div class="stats">
       <div class="stat"><div class="v">${(ev.decision.accuracy * 100).toFixed(1)}%</div><div class="k">decision agreement</div></div>
       <div class="stat good"><div class="v">${(ev.extraction.precision * 100).toFixed(1)}%</div><div class="k">extraction precision</div></div>
-      <div class="stat"><div class="v">${(ev.automation.automation_rate * 100).toFixed(1)}%</div><div class="k">automation</div></div>
       <div class="stat good"><div class="v">${(ev.deadline_compliance.rate * 100).toFixed(0)}%</div><div class="k">deadline compliance</div></div>
+      <div class="stat"><div class="v">${ev.audit.chains_valid}/${ev.audit.chains_total}</div><div class="k">chains verified</div></div>
       <div class="stat"><div class="v rupee">${rupee(r.recovered)}</div><div class="k">recovered</div></div>
-      <div class="stat warn"><div class="v rupee">${rupee(r.escalated_amount_pending)}</div><div class="k">pending human action</div></div>
-    </div>
-    <h2>Strategy comparison</h2>
-    <table class="mtable"><thead><tr><th>strategy</th><th>recovered</th><th>fees</th><th>net</th></tr></thead><tbody>
-      <tr><td>never contest</td><td class="rupee">${rupee(0)}</td><td class="rupee">${rupee(0)}</td><td class="rupee">${rupee(0)}</td></tr>
-      <tr><td>contest everything</td>
-        <td class="rupee">${rupee(money.baseline_contest_all.recovered)}</td>
-        <td class="rupee">${rupee(money.baseline_contest_all.fees_paid_on_losses)}</td>
-        <td class="rupee">${rupee(money.baseline_contest_all.net)}</td></tr>
-      <tr><td><b>Recourse</b></td>
-        <td class="rupee">${rupee(r.recovered)}</td>
-        <td class="rupee">${rupee(r.fees_paid_on_losses)}</td>
-        <td class="rupee">${rupee(r.net)}</td></tr></tbody></table>
-    <p class="muted" style="max-width:640px">Contest-everything currently nets
-      more on this synthetic set. That is not hidden: the entire gap is money
-      Recourse deliberately escalates rather than fighting without a playbook
-      \u2014 ${rupee(r.escalated_gt_winnable_pending)} of ground-truth-winnable
-      value sits in the coverage gaps below. Zero wrong fights, zero wrong
-      accepts.</p>
-    <h2>Where Recourse currently stops</h2>
-    ${gaps.map(([code, g]) => `<div class="panel gap">
+      <div class="stat warn"><div class="v rupee">${rupee(r.escalated_amount_pending)}</div><div class="k">pending human action</div></div></div>
+    <h2>Where Recourse stops (priced coverage gaps)</h2>
+    ${Object.entries(m.coverage_gaps || {}).map(([code, g]) => `<div class="panel gap">
       <h3 class="mono">${esc(code)}</h3>
-      <div class="mono">${g.cases} held-out cases \u00b7 ${rupee(g.amount_at_risk)} at risk
-        \u00b7 ${rupee(g.gt_winnable_amount)} winnable per ground truth</div>
-      <div class="muted">Escalated because no v1 playbook covers this reason
-        code \u2014 the agent refuses to fight without deterministic evidence
-        rules. Needs: ${esc(g.needs)}.</div></div>`).join("")}
-    <h2>Safety numbers</h2>
-    <p class="mono">false fights: ${r.false_fights} (\u2211 ${rupee(r.false_fight_cost_total)}) \u00b7
-      audit chains valid: ${ev.audit.chains_valid}/${ev.audit.chains_total} \u00b7
-      escalation precision (strict): ${ev.automation.escalation_precision_strict}</p>
-    ${ev.gate_ablation ? `<h2>Gate ablation</h2>
-      <p class="muted" style="max-width:640px">${esc(ev.gate_ablation.label)}:
-      with the gate off, ${ev.gate_ablation.inadmissible_candidates_that_would_ship}
-      inadmissible evidence item(s) would have shipped and
-      ${ev.gate_ablation.decisions_that_would_flip.length} decision(s) would flip
-      ESCALATE \u2192 FIGHT \u2014 e.g. contesting on a POD delivered to the wrong
-      pincode.</p>` : ""}`;
+      <div class="mono">${g.cases} cases \u00b7 ${rupee(g.amount_at_risk)} at risk
+        \u00b7 ${rupee(g.gt_winnable_amount)} winnable</div>
+      <div class="muted">${esc(g.needs)}</div></div>`).join("")}
+    <p class="mono">zero wrong fights \u00b7 zero wrong accepts \u00b7 escalation
+      precision (strict): ${esc(ev.automation.escalation_precision_strict)}</p>`;
 }
 
 route();

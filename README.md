@@ -17,6 +17,17 @@ history is the engineering story. Full design record: `docs/decisions.md`
 (ADR-001…012) · [`ARCHITECTURE.md`](ARCHITECTURE.md) ·
 [`docs/DEMO.md`](docs/DEMO.md).
 
+## The cockpit (R6)
+
+The UI is an investigation cockpit: **intake in your own words** (optional
+browser voice dictation, feature-detected), a live **Investigation Ledger**
+rendered exclusively from the tamper-evident audit chain, a **server-
+authoritative countdown** (local ticks, 30s re-sync, EXPIRED disables
+actions the server would reject anyway), **provenance badges** on every
+fact, drag-and-drop uploads on the agent's ask-panel, and click-to-verify
+KB citation popovers. Zero frontend dependencies; works offline;
+reduced-motion respected.
+
 ## Quickstart
 
 ```bash
