@@ -25,11 +25,17 @@ DB = TMP / "demo.db"
 
 
 def _bootstrap() -> None:
+    """ATOMIC: build against a temp path and os.replace() into place as the
+    very last step — a serverless timeout mid-seed can never cache a
+    half-built world (the next cold start simply retries). Seeding uses the
+    deterministic StubAIClient regardless of RECOURSE_AI_PROVIDER: the demo
+    world is identical, free, and fits the 30s function budget; LIVE intake,
+    uploads, and vision still use the configured real provider."""
     if DB.exists():
         return
     TMP.mkdir(parents=True, exist_ok=True)
     from app import datagen
-    from app.ai.client import get_client
+    from app.ai.client import StubAIClient
     from app.datagen import generate
     from app.orchestrator import Orchestrator
     from app.policy.playbooks import load_playbooks
@@ -37,17 +43,19 @@ def _bootstrap() -> None:
     from app.tools.payments_adapter import SimulatorAdapter
 
     generate(seed=42, out_dir=DATA)
-    shutil.copy(DATA / "dataset.db", DB)
+    building = TMP / "building.db"
+    building.unlink(missing_ok=True)
+    shutil.copy(DATA / "dataset.db", building)
 
     split = json.loads((DATA / "split.json").read_text())
     gt = json.loads((DATA / "ground_truth.json").read_text())["labels"]
-    repo = Repository(DB)
+    repo = Repository(building)
     pb = load_playbooks()
     orch = Orchestrator(
         repo,
         SimulatorAdapter(repo, outcomes={d: g["gt_outcome_if_fought"]
                                          for d, g in gt.items()}),
-        ai_client=get_client(), playbooks=pb,
+        ai_client=StubAIClient(), playbooks=pb,
         now=datetime.fromisoformat(split["sim_now"]), sleep=lambda s: None,
         investigation_mode="agentic")   # R6: rich Investigation Ledgers
     wanted = (datagen.CLEAN, datagen.HINGLISH, datagen.CONFLICT_PIN,
@@ -81,10 +89,12 @@ def _bootstrap() -> None:
         res = submit_intake(
             repo, f"The customer says they never received order "
                   f"#{order.id.removeprefix('ord_')}, but we dispatched it.",
-            get_client(), now=datetime.fromisoformat(split["sim_now"]))
+            StubAIClient(), now=datetime.fromisoformat(split["sim_now"]))
         orch.run_case(res.case.id)
         break
     repo.close()
+    import os
+    os.replace(building, DB)   # atomic publish — all or nothing
 
 
 _bootstrap()
