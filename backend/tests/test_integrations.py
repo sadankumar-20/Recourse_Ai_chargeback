@@ -88,6 +88,41 @@ class TestAfterShipAdapterOffline(unittest.TestCase):
             config.TRACKING_PROVIDER = old
 
 
+class TestTrackingMoreAdapterOffline(unittest.TestCase):
+    def test_missing_key_and_parsing(self):
+        from app.tools.tracking import TrackingMoreTracking
+        old = config.TRACKINGMORE_API_KEY
+        config.TRACKINGMORE_API_KEY = ""
+        try:
+            with self.assertRaises(TrackingError) as cm:
+                TrackingMoreTracking()
+            self.assertIn("TRACKINGMORE_API_KEY", str(cm.exception))
+        finally:
+            config.TRACKINGMORE_API_KEY = old
+        calls = []
+
+        def fake(url, headers):
+            calls.append((url, headers))
+            return 200, {"data": [{"delivery_status": "delivered",
+                                   "latest_checkpoint_time":
+                                       "2026-08-10T14:03:00",
+                                   "signed_by": "R Kumar",
+                                   "destination_address": "Bengaluru 560038"}]}
+        a = TrackingMoreTracking(api_key="tm_test", http_get=fake)
+        rec = a.track("DLV900123", "Delhivery")
+        self.assertIn("tracking_numbers=DLV900123", calls[0][0])
+        self.assertEqual(calls[0][1]["Tracking-Api-Key"], "tm_test")
+        self.assertEqual((rec.status, rec.provenance),
+                         ("delivered", "tracking_api"))
+        a = TrackingMoreTracking(api_key="tm_test",
+                                 http_get=lambda u, h: (200, {"data": []}))
+        self.assertIsNone(a.track("GONE", "delhivery"))
+        a = TrackingMoreTracking(api_key="tm_test",
+                                 http_get=lambda u, h: (429, {}))
+        with self.assertRaises(TrackingError):
+            a.track("X", "delhivery")
+
+
 class ScriptedVisionClient:
     """Vision-capable client for offline tests: provider quacks anthropic,
     transcription is scripted. Only the transport differs from production."""

@@ -111,6 +111,53 @@ class AfterShipTracking:
             receiver=t.get("signed_by"), address=dest)
 
 
+class TrackingMoreTracking:
+    """TrackingMore v4 (free-tier friendly): plain Tracking-Api-Key header,
+    no signature schemes, no permission matrix. Same rules as AfterShip:
+    env-keyed, loud failure without a key, provenance tracking_api, never a
+    silent fallback, transport injectable so parsing is offline-tested."""
+    BASE = "https://api.trackingmore.com/v4"
+
+    def __init__(self, api_key: str | None = None, http_get=None):
+        self.api_key = (api_key if api_key is not None
+                        else config.TRACKINGMORE_API_KEY)
+        if not self.api_key:
+            raise TrackingError(
+                "tracking provider 'trackingmore' selected but "
+                "TRACKINGMORE_API_KEY is not set. Export the key, or use "
+                "RECOURSE_TRACKING=simulator.")
+        self._http_get = http_get or self._real_get
+
+    def _real_get(self, url: str, headers: dict) -> tuple[int, dict]:
+        import requests
+        resp = requests.get(url, headers=headers, timeout=30)
+        return resp.status_code, (resp.json() if resp.content else {})
+
+    def track(self, awb: str, courier: str) -> TrackingRecord | None:
+        url = (f"{self.BASE}/trackings/get?tracking_numbers={awb}"
+               f"&courier_code={courier.strip().lower().replace(' ', '-')}")
+        status_code, body = self._http_get(
+            url, {"Tracking-Api-Key": self.api_key,
+                  "Content-Type": "application/json"})
+        if status_code != 200:
+            raise TrackingError(
+                f"TrackingMore returned {status_code} for {awb}")
+        rows = (body.get("data") or [])
+        if not rows:
+            return None
+        r = rows[0]
+        raw = (r.get("delivery_status") or r.get("status")
+               or "unknown").lower()
+        status = "delivered" if raw == "delivered" else raw.replace(" ", "_")
+        return TrackingRecord(
+            awb=awb, courier=courier, status=status,
+            provenance=Provenance.TRACKING_API.value,
+            delivered_at=r.get("latest_checkpoint_time")
+                         if status == "delivered" else None,
+            receiver=r.get("signed_by") or None,
+            address=r.get("destination_address") or None)
+
+
 def track_via_configured_provider(ro, awb: str,
                                   courier: str) -> TrackingRecord | None:
     provider = config.TRACKING_PROVIDER
@@ -118,5 +165,7 @@ def track_via_configured_provider(ro, awb: str,
         return simulator_track(ro, awb)
     if provider == "aftership":
         return AfterShipTracking().track(awb, courier)
-    raise TrackingError(f"unknown tracking provider '{provider}' "
-                        f"(expected 'simulator' or 'aftership')")
+    if provider == "trackingmore":
+        return TrackingMoreTracking().track(awb, courier)
+    raise TrackingError(f"unknown tracking provider '{provider}' (expected "
+                        f"'simulator', 'aftership', or 'trackingmore')")
