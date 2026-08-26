@@ -16,15 +16,26 @@
     </div>
   </div>
   <nav>
-    <a href="#/intake" data-nav="intake">Command Center</a>
-    <a href="#/overview" data-nav="overview">Operations</a>
-    <a href="#/cases" data-nav="cases">Investigations</a>
-    <a href="#/metrics" data-nav="metrics">Evaluation</a>
+    <a href="#/intake" data-nav="intake"><i>⌂</i>Command Center</a>
+    <a href="#/overview" data-nav="overview"><i>☷</i>Operations</a>
+    <a href="#/cases" data-nav="cases"><i>⌕</i>Investigations</a>
+    <a href="#/cases" data-nav="needs"><i>✉</i>Needs Your Input
+      <b class="count" id="n-needs" hidden></b></a>
+    <a href="#/cases" data-nav="review"><i>⚖</i>Human Review
+      <b class="count" id="n-review" hidden></b></a>
+    <a href="#/metrics" data-nav="metrics"><i>↗</i>Evaluation</a>
   </nav>
   <div class="rail-status" id="rail-status"></div>
   <div class="rail-foot" id="rail-foot"></div>
 </aside>
-<main id="main" tabindex="-1"></main>
+<div class="content">
+  <header class="topbar">
+    <span class="creed-line">AI INVESTIGATES.&ensp;EVIDENCE PROVES.&ensp;POLICY
+      DECIDES.&ensp;EXECUTION ACTS.</span>
+    <span class="top-right" id="top-status"><span class="pill">● DEMO</span></span>
+  </header>
+  <main id="main" tabindex="-1"></main>
+</div>
 <script src="app.js"></script>
 </body>
 </html>

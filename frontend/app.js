@@ -62,11 +62,11 @@ async function renderLanding() {
 
 /* ---------- intake ---------- */
 const WF = [
-  ["INTAKE", "Understand what happened \u2014 your words, stored verbatim."],
-  ["INVESTIGATE", "Search orders, payments, shipments, inbox and policy."],
-  ["VERIFY", "AI findings pass deterministic evidence verification."],
-  ["DECIDE", "Policy engine evaluates FIGHT / ACCEPT / ESCALATE."],
-  ["RECOVER", "Only the controlled executor can submit financial actions."]];
+  ["\ud83d\udcc4", "INTAKE", "Understand what happened."],
+  ["\ud83d\udd0d", "INVESTIGATE", "Search orders, payments, shipments and policy."],
+  ["\ud83d\udee1", "VERIFY", "AI findings pass deterministic evidence verification."],
+  ["\u2696\ufe0f", "DECIDE", "Policy engine evaluates FIGHT / ACCEPT / ESCALATE."],
+  ["\ud83d\udcb0", "RECOVER", "Only the controlled executor can submit financial actions."]];
 const EXAMPLES = [
   "The customer says the order never arrived, but we dispatched it on time",
   "Customer disputes the payment for order #0019 and wants a refund",
@@ -75,26 +75,35 @@ const EXAMPLES = [
 
 async function renderIntake() {
   main.innerHTML = `<div class="cc">
+    <div class="hero-wrap"><div>
     <div class="kicker">Recourse \u00b7 merchant revenue recovery</div>
     <h1>Investigate before you pay.</h1>
     <p class="support">Recourse uses AI to investigate disputes, verify
       evidence, and recover revenue \u2014 without letting AI make unsafe
-      financial decisions.</p>
-    <div class="wf">${WF.map(([k, d]) =>
-      `<div><b>${k}</b><span class="wfd">${d}</span></div>`).join("")}</div>
+      financial decisions.</p></div>
+    <div class="hero-orn">MERCHANTS<br>KEEP COMMERCE<br>MOVING. \u2192</div>
+    </div>
+    <div class="wf">${WF.map(([ico, k, d], i) =>
+      `<div><span class="num">${i + 1}</span><span class="ico">${ico}</span><b>${k}</b><span class="wfd">${d}</span></div>`).join("")}</div>
     <div class="cc-grid">
       <div class="workspace">
         <div class="whead">Start an investigation</div>
         <p class="sub" style="margin:4px 0 10px">Tell Recourse what happened
           \u2014 your own words, the customer's pasted message, or a
           payment / order reference.</p>
-        <textarea id="story" placeholder="The customer says they never received order #1042, but our courier says it was delivered yesterday\u2026"></textarea>
+        <textarea id="story" maxlength="4000" placeholder="The customer says they never received order #1042, but our courier says it was delivered yesterday\u2026"></textarea>
+        <div class="counter"><span id="charn">0</span> / 4000</div>
+        <div class="fields">
+          <div><label>PAYMENT ID (OPTIONAL)</label>
+            <input type="text" id="payid" placeholder="e.g. pay_0019"></div>
+          <div><label>ORDER REFERENCE (OPTIONAL)</label>
+            <input type="text" id="ordref" placeholder="e.g. ORD-0019"></div>
+        </div>
         <div class="chips">${EXAMPLES.map((e, i) =>
           `<button data-ex="${i}">\u201c${esc(e.slice(0, 44))}\u2026\u201d</button>`).join("")}</div>
         <div class="hero-row">
-          <input type="text" id="payid" placeholder="pay_0019 (optional)">
           <button class="btn voice" id="mic" aria-pressed="false" hidden>\ud83c\udf99 Dictate</button>
-          <button class="btn primary" id="go">Start investigation</button>
+          <button class="btn primary" id="go">\u2192&nbsp; Start investigation</button>
         </div>
         <div class="trust">
           <div><b>YOUR MESSAGE</b><span>Stored verbatim</span></div>
@@ -130,6 +139,15 @@ async function renderIntake() {
           <div class="muted">checking\u2026</div></div>
       </div>
     </div></div>`;
+  const story = $("#story"), charn = $("#charn");
+  if (story && charn) story.addEventListener("input",
+    () => { charn.textContent = story.value.length; });
+  api("/cases").then(({ cases }) => {
+    const set = (id, n) => { const el = $(id);
+      if (el) { el.hidden = !n; el.textContent = n; } };
+    set("#n-needs", cases.filter((c) => c.state === "needs_input").length);
+    set("#n-review", cases.filter((c) => c.escalated).length);
+  }).catch(() => {});
   document.querySelectorAll(".chips button").forEach((b) =>
     b.addEventListener("click", () => {
       $("#story").value = EXAMPLES[b.dataset.ex]; $("#story").focus();
@@ -142,7 +160,11 @@ async function renderIntake() {
       <div class="muted" style="font:10px var(--mono);margin-top:6px">
       simulated surfaces are labeled \u2014 never claimed real</div>`;
     const rail = $("#rail-status");
-    if (rail) rail.innerHTML = rows.join("");
+    if (rail) rail.innerHTML = "<b style=\"font:700 10px var(--mono);letter-spacing:.12em\">SYSTEM STATUS</b>" + rows.join("");
+    const top = $("#top-status");
+    if (top) top.innerHTML = `<span class="pill">\u25cf DEMO</span>
+      <span>${Object.values(h.integrations || {}).every((v) =>
+        v.mode !== "unavailable") ? "all surfaces reporting" : "some surfaces unavailable"}</span>`;
   }).catch(() => {});
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
   if (SR) {
@@ -161,7 +183,11 @@ async function renderIntake() {
   $("#go").onclick = async () => {
     $("#go").disabled = true;
     try {
-      const body = { text: $("#story").value };
+      let text = $("#story").value;
+      const ord = ($("#ordref") ? $("#ordref").value : "").trim();
+      if (ord && !text.includes(ord))
+        text += ` (order reference: ${ord})`;   // backend anchors from text
+      const body = { text };
       if ($("#payid").value.trim()) body.payment_id = $("#payid").value.trim();
       const r = await api("/intake", { method: "POST",
         headers: { "Content-Type": "application/json" },

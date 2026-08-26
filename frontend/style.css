@@ -433,3 +433,72 @@ h2 { text-transform:uppercase; font:700 12px var(--mono); letter-spacing:.14em;
 .dot.real { background:var(--verified); }
 .dot.simulator, .dot.local { background:var(--amber); }
 .dot.unavailable { background:var(--rule); }
+
+
+/* ============ R11 — olive command center (reference match) ============ */
+:root { --paper:#E7E8D6; --panel:#FAF8EC; --panel2:#F2F1DF; --ink:#23281E;
+  --ink-soft:#5C6151; --rule:#CFD0B8; --forest:#2E4023; --brass:#A8722A;
+  --verified:#3E6B3A; --verified-bg:#E4ECDD; --amber:#B4640F;
+  --amber-bg:#F4E8D2; --inadmissible:#9C3B2C; --inadmissible-bg:#F3E0DA; }
+body { background:var(--paper); display:flex; }
+.rail { background:var(--panel); border-right:1px solid var(--rule); }
+.content { flex:1; min-width:0; display:flex; flex-direction:column; }
+.topbar { display:flex; justify-content:space-between; align-items:center;
+  gap:12px; padding:10px 26px; border-bottom:1px solid var(--rule);
+  background:var(--panel); }
+.creed-line { font:700 11.5px var(--mono); letter-spacing:.12em; }
+.pill { font:700 11px var(--mono); border:1px solid var(--rule);
+  border-radius:999px; padding:3px 11px; background:var(--panel2);
+  color:var(--verified); }
+.top-right { display:flex; gap:10px; align-items:center;
+  font:11px var(--mono); color:var(--ink-soft); }
+nav a { display:flex; align-items:center; gap:10px; border-radius:8px;
+  margin:2px 8px; padding:9px 12px; }
+nav a i { font-style:normal; width:16px; text-align:center; }
+nav a.active { background:var(--forest); color:var(--panel); }
+nav a .count { margin-left:auto; font:700 10px var(--mono);
+  background:var(--brass); color:var(--panel); border-radius:999px;
+  min-width:18px; text-align:center; padding:1px 5px; }
+.cc { max-width:1240px; }
+.cc h1 { font-size:54px; letter-spacing:-.015em; }
+.cc .hero-wrap { display:flex; justify-content:space-between; gap:20px;
+  align-items:flex-start; }
+.hero-orn { font:700 11px var(--mono); letter-spacing:.14em;
+  color:var(--ink-soft); text-align:right; border-right:2px solid var(--rule);
+  padding-right:14px; line-height:2; white-space:nowrap; }
+.wf { background:var(--panel); align-items:stretch; }
+.wf div { position:relative; padding-left:16px; }
+.wf div::after { content:"→"; position:absolute; right:-7px; top:38%;
+  color:var(--ink-soft); background:var(--panel); z-index:1; }
+.wf div:last-child::after { content:""; }
+.wf .num { display:inline-flex; width:20px; height:20px; border-radius:50%;
+  background:var(--forest); color:var(--panel); font:700 11px var(--mono);
+  align-items:center; justify-content:center; margin-right:7px; }
+.wf .ico { margin-right:6px; }
+.workspace { background:var(--panel); border-top:3px solid var(--forest);
+  padding:24px; }
+.workspace .whead { font-size:26px; }
+.workspace textarea, .hero textarea { min-height:210px; background:var(--panel2);
+  border:1.5px solid var(--rule); font-size:15.5px; }
+.workspace textarea:focus { outline:2px solid var(--forest); }
+.counter { text-align:right; font:11px var(--mono); color:var(--ink-soft);
+  margin-top:4px; }
+.fields { display:grid; grid-template-columns:1fr 1fr; gap:12px;
+  margin:12px 0; }
+.fields label { font:700 10px var(--mono); letter-spacing:.1em;
+  color:var(--ink-soft); display:block; margin-bottom:4px; }
+.fields input { width:100%; padding:10px 12px; border:1.5px solid var(--rule);
+  border-radius:8px; font:14px var(--mono); background:var(--panel2); }
+.btn.primary { background:var(--forest); border-color:var(--forest);
+  color:var(--panel); font-size:15px; padding:12px 26px; width:100%;
+  transition:filter .15s; }
+.btn.primary:hover { filter:brightness(1.12); }
+.chips button { background:var(--panel2); }
+.chips button::after { content:" →"; }
+.preview { border-top:3px solid var(--brass); }
+.preview .plabel { background:var(--amber-bg); }
+.exrow { font:13.5px var(--mono); }
+.pdl .t { font-size:24px; }
+.rail-status .st span:last-child { font-weight:700; }
+@media (max-width:940px){ .cc h1{font-size:36px} .hero-orn{display:none}
+  .fields{grid-template-columns:1fr} .topbar{flex-wrap:wrap} }

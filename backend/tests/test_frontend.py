@@ -99,3 +99,11 @@ def test_command_center_opening():
         and "Deterministic" in JS
     assert "wf div:hover .wfd" in CSS       # hover reveal
     assert "server-authoritative" in JS     # example deadline labeled
+
+
+def test_olive_reference_layout():
+    assert "--forest" in CSS and "--paper:#E7E8D6" in CSS
+    assert "topbar" in CSS and "creed-line" in HTML
+    assert "ORDER REFERENCE" in JS and "charn" in JS      # counter + field
+    assert "order reference:" in JS                        # merged into text
+    assert 'api("/cases")' in JS and "n-needs" in JS       # live badges
