@@ -164,6 +164,14 @@ def _deterministic_plan(ctx: InvestigationContext,
                         f"'{data.get('status', 'no record')}' and no delivery "
                         f"confirmation."))
 
+    if not _seen(history, "search_knowledge"):
+        return PlannerDecision(
+            "tool", "retrieve the representment requirements for this "
+                    "reason code",
+            tool="search_knowledge",
+            args={"query": f"{ctx.dispute['reason_code']} representment "
+                           f"requirements evidence"})
+
     if not _seen(history, "search_inbox"):
         return PlannerDecision("tool", "review the customer's messages",
                                tool="search_inbox",

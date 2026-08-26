@@ -30,6 +30,7 @@ import json
 from dataclasses import dataclass, field
 from typing import Any, Callable
 
+from .. import config
 from ..store.models import Provenance
 from ..store.repo import Repository
 
@@ -201,6 +202,42 @@ def _fetch_tracking(ro: ReadOnlyRepo, a: dict):
             "confirmation": "courier tracking shows successful delivery"},            [Provenance.SIMULATOR.value]
 
 
+def _search_knowledge(ro: ReadOnlyRepo, a: dict):
+    """Local KB retrieval (R3). The AI never touches KB storage: results
+    arrive only through this registry tool, and anything generated from
+    them must pass policy/kb_citations verbatim verification."""
+    if not config.KNOWLEDGE_ENABLED:
+        return {"error": "knowledge base disabled (RECOURSE_KNOWLEDGE=false)"}, []
+    from ..kb import get_kb
+    hits = get_kb().search(a["query"], limit=a.get("limit", 3))
+    return {"results": [{**c.to_dict(), "score": s} for c, s in hits],
+            "count": len(hits)}, (["kb_local"] if hits else [])
+
+
+def _find_similar_cases(ro: ReadOnlyRepo, a: dict):
+    """Historical precedent as CONTEXT ONLY: resolved cases sharing the
+    reason code, with their action, outcome, and admitted evidence keys.
+    Nothing here can override the gate, EV math, or the decision engine."""
+    rows = ro.select(
+        "SELECT c.id AS case_id, d.amount, dec.action, "
+        "COALESCE(o.result, 'pending') AS outcome "
+        "FROM cases c JOIN disputes d ON d.id = c.dispute_id "
+        "JOIN decisions dec ON dec.case_id = c.id "
+        "LEFT JOIN outcomes o ON o.case_id = c.id "
+        "WHERE d.reason_code = ? AND c.state = 'closed' "
+        "ORDER BY c.id LIMIT ?",
+        (a["reason_code"], a.get("limit", 3)))
+    for r in rows:
+        keys = ro.select(
+            "SELECT DISTINCT evidence_key FROM evidence "
+            "WHERE case_id = ? AND gate_verdict = 'PASS' ORDER BY 1",
+            (r["case_id"],))
+        r["admitted_keys"] = [k["evidence_key"] for k in keys]
+    return {"similar_cases": rows, "count": len(rows),
+            "note": "context only — precedent never overrides the gate or "
+                    "the decision engine"},            ([Provenance.SIMULATOR.value] if rows else [])
+
+
 TOOLS: dict[str, ToolSpec] = {t.name: t for t in (
     ToolSpec("search_orders",
              "Find candidate orders by payment_id, amount, or customer email.",
@@ -224,6 +261,17 @@ TOOLS: dict[str, ToolSpec] = {t.name: t for t in (
              "Query the courier's tracking system by AWB — useful when the "
              "merchant's own POD document is missing.",
              {"awb": {"type": str, "required": True}}, _fetch_tracking),
+    ToolSpec("search_knowledge",
+             "Retrieve dispute-handling rules, representment requirements, "
+             "and merchant SOPs from the local knowledge base.",
+             {"query": {"type": str, "required": True},
+              "limit": {"type": int, "required": False}}, _search_knowledge),
+    ToolSpec("find_similar_cases",
+             "Retrieve resolved cases with the same reason code as context "
+             "— precedent never overrides policy.",
+             {"reason_code": {"type": str, "required": True},
+              "limit": {"type": int, "required": False}},
+             _find_similar_cases),
 )}
 
 

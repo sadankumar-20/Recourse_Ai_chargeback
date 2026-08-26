@@ -45,6 +45,7 @@ class InvestigationOutcome:
     request_to_user: str | None = None
     missing: list[str] = field(default_factory=list)
     stats: dict = field(default_factory=dict)
+    kb_citations: list[dict] = field(default_factory=list)   # VERIFIED only
 
 
 def run_investigation(repo: Repository, case: Case, dispute: Dispute, order,
@@ -73,6 +74,7 @@ def run_investigation(repo: Repository, case: Case, dispute: Dispute, order,
 
     history: list[dict] = []
     docs: dict[str, Document] = {}
+    kb_citations: list[dict] = []
     invalid_requests = 0
     last_request: tuple | None = None
     repeats = 0
@@ -82,13 +84,13 @@ def run_investigation(repo: Repository, case: Case, dispute: Dispute, order,
             step = plan_next(ctx, history, client)
         except LowConfidence as e:
             return _finish(repo, case, "NO_PROGRESS", docs, history,
-                           registry, invalid_requests,
+                           registry, invalid_requests, kb_citations,
                            note=f"planner low confidence: {e.reason}")
         d: PlannerDecision = step.decision
 
         if d.action == "complete":
             return _finish(repo, case, "SUFFICIENT_EVIDENCE", docs, history,
-                           registry, invalid_requests, note=d.goal)
+                           registry, invalid_requests, kb_citations, note=d.goal)
         if d.action == "needs_input":
             repo.append_audit(case.id, "AGENT_NEEDS_INPUT", {
                 "goal": d.goal, "missing": d.missing,
@@ -97,25 +99,28 @@ def run_investigation(repo: Repository, case: Case, dispute: Dispute, order,
             return InvestigationOutcome(
                 termination="NEEDS_INPUT", documents=list(docs.values()),
                 request_to_user=d.request_to_user, missing=d.missing,
-                stats=_stats(registry, history, invalid_requests))
+                stats=_stats(registry, history, invalid_requests),
+                kb_citations=kb_citations)
 
         request = (d.tool, json.dumps(d.args, sort_keys=True))
         repeats = repeats + 1 if request == last_request else 0
         last_request = request
         if repeats >= 2:
             return _finish(repo, case, "NO_PROGRESS", docs, history,
-                           registry, invalid_requests,
+                           registry, invalid_requests, kb_citations,
                            note=f"repeated identical request {d.tool}")
 
         try:
             result = registry.execute(d.tool, d.args)
         except ToolBudgetExceeded:
             return _finish(repo, case, "BUDGET_EXHAUSTED", docs, history,
-                           registry, invalid_requests)
+                           registry, invalid_requests, kb_citations)
         if not result.ok:
             invalid_requests += 1
 
         _collect_documents(repo, case, order, result, docs)
+        if d.tool == "search_knowledge" and result.ok:
+            kb_citations.extend(_verified_citations(result.data))
         summary = (json.dumps(result.data, default=str)[:_OBS_LIMIT]
                    if result.ok else result.error)
         history.append({"tool": d.tool, "args": d.args, "ok": result.ok,
@@ -174,12 +179,37 @@ def _stats(registry: ToolRegistry, history: list[dict],
             "tools_used": sorted({h["tool"] for h in history})}
 
 
+def _verified_citations(data: dict) -> list[dict]:
+    """Construct citations from retrieval results and keep ONLY those that
+    pass deterministic verbatim verification. The quote is code-extracted
+    (first sentence of the chunk), then verified anyway — belt and braces;
+    an LLM paraphrase can never enter this list."""
+    from .kb import get_kb
+    from .policy.kb_citations import verify_kb_citation
+    out = []
+    for r in (data.get("results") or [])[:2]:
+        quote = r["text"].split(". ")[0].strip()
+        if not quote.endswith("."):
+            quote += "."
+        verdict = verify_kb_citation(
+            {"source_id": r["source_id"], "chunk_id": r["chunk_id"],
+             "quote": quote}, get_kb())
+        if verdict.valid:
+            out.append({"source_id": r["source_id"],
+                        "chunk_id": r["chunk_id"], "quote": quote,
+                        "document_version": r["document_version"]})
+    return out
+
+
 def _finish(repo: Repository, case: Case, termination: str, docs: dict,
             history: list[dict], registry: ToolRegistry,
-            invalid_requests: int, note: str = "") -> InvestigationOutcome:
+            invalid_requests: int, kb_citations: list[dict] | None = None,
+            note: str = "") -> InvestigationOutcome:
     stats = _stats(registry, history, invalid_requests)
     repo.append_audit(case.id, "AGENT_COMPLETE", {
         "termination": termination, "note": note,
-        "documents_gathered": sorted(docs), **stats})
+        "documents_gathered": sorted(docs),
+        "kb_citations_verified": len(kb_citations or []), **stats})
     return InvestigationOutcome(termination=termination,
-                                documents=list(docs.values()), stats=stats)
+                                documents=list(docs.values()), stats=stats,
+                                kb_citations=kb_citations or [])

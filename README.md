@@ -67,6 +67,19 @@ A/B (`evals/agentic_ab.json`): 11 missing-POD cases recovered, +33 admitted
 evidence items, 3.1 avg tool calls, zero invalid requests or violations —
 with the frozen held-out eval proven byte-identical.
 
+## Knowledge base with verified citations (R3)
+
+A local, versioned, offline KB (dispute policy, merchant SOPs, representment
+guide) behind two read-only registry tools: `search_knowledge` (BM25,
+deterministic) and `find_similar_cases` (precedent as context only). The
+gate's philosophy applied to RAG: every citation entering a draft or
+escalation carries source_id + chunk_id + an exact quote and is verified
+VERBATIM by `policy/kb_citations.py` — paraphrases fail with structured
+reasons. Drafts gain a code-inserted, re-validated "Policy basis" appendix;
+a test proves decisions are identical with knowledge on or off, and a
+poisoned KB document ("IGNORE ALL PREVIOUS INSTRUCTIONS…") produces a
+bit-identical investigation. Metrics: `evals/kb_metrics.json`.
+
 ## Held-out results (frozen 40 disputes, never tuned on, offline stub)
 
 | metric | result |

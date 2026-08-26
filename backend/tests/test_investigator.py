@@ -118,6 +118,11 @@ class TestPlanner(unittest.TestCase):
                         "ok": True, "data": {"status": "delivered"},
                         "summary": ""})
         d = plan_next(ctx, history, StubAIClient()).decision
+        self.assertEqual(d.tool, "search_knowledge")   # R3: policy context
+        self.assertIn("goods_not_received", d.args["query"])
+        history.append({"tool": "search_knowledge", "args": d.args,
+                        "ok": True, "data": {"results": []}, "summary": ""})
+        d = plan_next(ctx, history, StubAIClient()).decision
         self.assertEqual(d.tool, "search_inbox")
 
     def test_needs_input_when_no_delivery_record_anywhere(self):

@@ -169,9 +169,11 @@ class Orchestrator:
         # GATHER ----------------------------------------------------------------
         self._deadline_guard(dispute, acting=False)
         case = self.repo.update_case_state(case.id, CaseState.GATHERING)
+        kb_citations: list[dict] = []
         if self.investigation_mode == "agentic":
             outcome = run_investigation(self.repo, case, dispute, order,
                                         playbook, self.ai)
+            kb_citations = outcome.kb_citations
             if outcome.termination == "NEEDS_INPUT":
                 # R4 activates the interactive needs_input pause; until then
                 # the structured request escalates to a human.
@@ -179,9 +181,12 @@ class Orchestrator:
                     "investigation needs merchant input: "
                     + (outcome.request_to_user or "additional evidence"),
                     details=[f"missing required '{m}'"
-                             for m in outcome.missing],
+                             for m in outcome.missing]
+                    + [f"policy basis ({c['source_id']}:{c['chunk_id']}): "
+                       f"\"{c['quote']}\"" for c in kb_citations[:1]],
                     extra={"agent_request": outcome.request_to_user,
-                           "termination": outcome.termination})
+                           "termination": outcome.termination,
+                           "kb_citations": kb_citations})
             docs = outcome.documents
         else:
             docs = self._gather(case, order)
@@ -217,15 +222,38 @@ class Orchestrator:
         bundle: dict = {"decision": outcome.to_dict()}
         if outcome.action.value == "FIGHT":
             draft = draft_representment(admitted, dispute, order, self.ai)
+            text = draft.text
+            kb_map: dict[str, dict] = {}
+            if kb_citations:
+                # Policy basis is CODE-INSERTED from verified citations —
+                # the model never paraphrases policy into the artifact —
+                # then validated again like every other citation.
+                from .policy.citations import validate_citations
+                lines = []
+                for i, c in enumerate(kb_citations[:2], start=1):
+                    kb_map[f"KB{i}"] = c
+                    lines.append(f"[KB{i}] {c['source_id']}:{c['chunk_id']} "
+                                 f"({c['document_version']}) — "
+                                 f"\"{c['quote']}\"")
+                text = text + "\n\nPolicy basis:\n" + "\n".join(lines)
+                violations = validate_citations(
+                    text, set(draft.display_map), set(kb_map))
+                if violations:
+                    raise _Escalate(
+                        "draft failed citation validation after KB appendix",
+                        details=violations[:4])
             self.repo.append_audit(case.id, "DRAFT_CREATED", {
                 "display_map": draft.display_map,
-                "chars": len(draft.text),
+                "kb_citations": kb_map,
+                "chars": len(text),
                 "ai_calls": [r.to_dict() for r in draft.records]})
             self.repo.append_audit(case.id, "DRAFT_VALIDATED", {
                 "admitted_ids": sorted(draft.display_map.values()),
                 "validator": "policy.citations", "violations": 0})
-            bundle["representment"] = draft.text
+            bundle["representment"] = text
             bundle["evidence"] = sorted(draft.display_map.values())
+            if kb_map:
+                bundle["kb_citations"] = kb_map
 
         # ACT ---------------------------------------------------------------------
         self._deadline_guard(dispute, acting=True)   # hard block after deadline

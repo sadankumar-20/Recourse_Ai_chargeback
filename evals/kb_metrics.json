@@ -1,0 +1,18 @@
+{
+ "kb_checksum": "05c43592d4ce40e2",
+ "cases": 80,
+ "cases_reaching_investigation": 58,
+ "cases_using_knowledge": 58,
+ "knowledge_queries": 58,
+ "retrieval_hits": 58,
+ "relevant_top_hits": 58,
+ "verified_citations_attached": 116,
+ "invalid_citations_attached": 0,
+ "completed_investigations": 58,
+ "chains_invalid": 0,
+ "deadline_violations": 0,
+ "retrieval_hit_rate": 1.0,
+ "relevant_top_hit_rate": 1.0,
+ "knowledge_queries_per_investigated_case": 1.0,
+ "citation_validity_rate_by_construction": 1.0
+}

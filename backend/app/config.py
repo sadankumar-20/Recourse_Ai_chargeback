@@ -39,6 +39,11 @@ AI_PROVIDER = os.environ.get("RECOURSE_AI_PROVIDER", "stub")
 # extraction, gate, and decision engine. Default stays fixed until the A/B
 # and eval v2 justify flipping it.
 INVESTIGATION_MODE = os.environ.get("RECOURSE_INVESTIGATION", "fixed")
+
+# R3: local, offline, deterministic knowledge base. Disabling degrades
+# gracefully: search_knowledge returns a structured error and the planner
+# moves on; nothing else depends on it.
+KNOWLEDGE_ENABLED = os.environ.get("RECOURSE_KNOWLEDGE", "true").lower() == "true"
 ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 LLM_MODEL = os.environ.get("RECOURSE_LLM_MODEL", "claude-sonnet-4-6")
 AI_MAX_TOKENS = 2000
