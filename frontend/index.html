@@ -22,11 +22,15 @@
   <nav>
     <a href="#/intake" data-nav="intake"><i>⌂</i>Command Center</a>
     <a href="#/overview" data-nav="overview"><i>☷</i>Operations</a>
-    <a href="#/cases" data-nav="cases"><i>⌕</i>Investigations</a>
-    <a href="#/needs" data-nav="needs"><i>✉</i>Needs Your Input
-      <b class="count" id="n-needs" hidden></b></a>
-    <a href="#/review" data-nav="review"><i>⚖</i>Human Review
-      <b class="count" id="n-review" hidden></b></a>
+    <div class="navgroup">
+      <span class="navlabel">Investigations</span>
+      <a class="sub" href="#/cases" data-nav="cases">All Investigations</a>
+      <a class="sub" href="#/needs" data-nav="needs">Needs Your Input
+        <b class="count" id="n-needs" hidden></b></a>
+      <a class="sub" href="#/review" data-nav="review">Human Review
+        <b class="count" id="n-review" hidden></b></a>
+      <a class="sub" href="#/closed" data-nav="closed">Closed Cases</a>
+    </div>
     <a href="#/metrics" data-nav="metrics"><i>↗</i>Evaluation</a>
   </nav>
   <div class="rail-status" id="rail-status"></div>

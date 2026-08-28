@@ -739,3 +739,37 @@ transform:translateY(-50%);width:7px;height:7px;border-radius:50%;
 border:1.5px solid var(--ink-soft);background:var(--panel);z-index:1}
 nav a.active::before{background:var(--brass);border-color:var(--brass)}
 nav a.active::after{left:26px}
+
+/* ============ P6 — grouped nav, vertical workflow, empty states ==== */
+.navgroup{display:flex;flex-direction:column;margin:2px 0}
+.navlabel{font:700 9.5px var(--mono);letter-spacing:.18em;
+color:var(--ink-soft);padding:8px 12px 4px 26px}
+nav .navgroup a.sub{padding-left:38px !important;font-size:12px}
+nav .navgroup a.sub::before{left:22px;width:5px;height:5px}
+nav .navgroup{position:relative}
+nav .navgroup::before{content:"";position:absolute;left:25px;top:26px;
+bottom:10px;width:1px;background:var(--rule)}
+.emptyq{text-align:center;padding:34px 20px}
+.emptyq b{font:700 11px var(--mono);letter-spacing:.16em;
+color:var(--ink-soft)}
+.emptyq p{font:14px var(--serif);color:var(--ink-soft);margin:8px 0 0}
+
+/* home workflow: calm vertical steps instead of nine cramped boxes */
+.wf{display:grid !important;grid-template-columns:1fr !important;
+gap:0 !important;position:relative;max-width:640px;margin:18px 0}
+.wf::before{content:"";position:absolute;left:15px;top:16px;bottom:16px;
+width:1px;background:var(--rule)}
+.wf div{display:grid !important;grid-template-columns:34px 1fr;
+gap:2px 14px;align-items:baseline;padding:12px 0;border:0 !important;
+background:none !important;position:relative}
+.wf div::after{content:"" !important;position:static}
+.wf .num{font:700 12px var(--mono);color:var(--brass);
+background:var(--panel);border:1px solid var(--rule);border-radius:50%;
+width:30px;height:30px;display:flex;align-items:center;
+justify-content:center;position:relative;z-index:1}
+.wf b{font:700 13px var(--mono);letter-spacing:.1em}
+.wf .wfd{grid-column:2;font:13.5px/1.55 var(--serif);
+color:var(--ink-soft)}
+.wfhead{font:700 10.5px var(--mono);letter-spacing:.22em;
+color:var(--ink-soft);margin:26px 0 0}
+@media (max-width:900px){.wf{max-width:100%}}

@@ -41,6 +41,7 @@ async function route() {
                  cases: renderQueue, metrics: renderMetrics,
                  needs: () => renderQueue("needs"),
                  review: () => renderQueue("review"),
+                 closed: () => renderQueue("closed"),
                  home: renderLanding}[view] || renderLanding)();
   } catch (e) { main.innerHTML = `<div class="error">${esc(e.message)}</div>`; }
   main.focus();
@@ -148,10 +149,15 @@ const WF = [
   ["08", "EXECUTION", "Only the single controlled executor can move money."],
   ["09", "AUDIT", "Every step lands on a tamper-evident hash chain."]];
 const EXAMPLES = [
-  "The customer says the order never arrived, but we dispatched it on time",
-  "Customer disputes the payment for order #0019 and wants a refund",
-  "Courier shows delivered for order #0019 but our POD file is missing",
-  "Customer was charged twice for pay_0042 and wants one charge reversed"];
+  "Customer disputes the payment for order #0042 and says they never " +
+  "received the order \u2014 please investigate whether the evidence " +
+  "supports the claim",
+  "Customer says order #0100 never arrived, but we dispatched it on " +
+  "time and the courier shows delivered",
+  "Courier shows delivered for order #0031 but the customer claims " +
+  "non-receipt \u2014 check our proof of delivery",
+  "Customer was charged twice for pay_0042 and wants one charge " +
+  "reversed"];
 
 async function renderIntake() {
   let cases = [];
@@ -169,6 +175,7 @@ async function renderIntake() {
       financial decisions.</p></div>
     <div class="hero-orn">MERCHANTS<br>KEEP COMMERCE<br>MOVING. \u2192</div>
     </div>
+    <div class="wfhead">HOW RECOURSE HANDLES A DISPUTE</div>
     <div class="wf">${WF.map(([ico, k, d], i) =>
       `<div><span class="num">${ico}</span><b>${k}</b><span class="wfd">${d}</span></div>`).join("")}</div>
     <div class="cc-grid">
@@ -177,7 +184,7 @@ async function renderIntake() {
         <p class="sub" style="margin:4px 0 10px">Tell Recourse what happened
           \u2014 your own words, the customer's pasted message, or a
           payment / order reference.</p>
-        <textarea id="story" maxlength="4000" placeholder="The customer says they never received order #1042, but our courier says it was delivered yesterday\u2026"></textarea>
+        <textarea id="story" maxlength="4000" placeholder="Describe the dispute \u2014 include the order (e.g. #0042) or payment id (pay_\u2026)"></textarea>
         <div class="counter"><span id="charn">0</span> / 4000</div>
         <div class="fields">
           <div><label>PAYMENT ID (OPTIONAL)</label>
@@ -292,9 +299,19 @@ async function renderIntake() {
     } catch (e) {
       if (stage) stage.textContent = "";
       const b = e.body || {};
+      const raw = String(e.message || "");
+      const human = /^\d+$/.test(raw)
+        ? "The investigation service hit an unexpected error \u2014 " +
+          "please try again in a moment."
+        : raw;
+      const dup = raw.match(/dispute\s+(disp[a-z0-9_]+)\s+already has/i);
       $("#interp").innerHTML = `<div class="panel">
-        <h3>Recourse needs a little more</h3>
-        <div>${esc(e.message)}</div>
+        <h3>${dup ? "This dispute already has an open case"
+                  : "Recourse needs a little more"}</h3>
+        <div>${esc(human)}</div>
+        ${dup ? `<p><a class="btn primary"
+          href="#/case/case_${esc(dup[1])}">Open the existing case
+          \u2192</a></p>` : ""}
         ${b.missing ? `<div class="mono">missing: ${esc(b.missing.join(", "))}</div>` : ""}
         ${b.interpretation && b.interpretation.reason_code ? `
           <div class="rule-line">how I read it: ${esc(b.interpretation.customer_claim || "")}
@@ -707,14 +724,28 @@ function bindRows() {
 async function renderQueue(filter) {
   let { cases, total } = await api("/cases");
   const QT = { needs: ["Needs your input",
-                 (c) => c.state === "needs_input"],
+                 (c) => c.state === "needs_input",
+                 "NO CASES REQUIRE YOUR INPUT",
+                 "Recourse will list a case here the moment it needs " +
+                 "something only you can provide."],
                review: ["Human review",
-                 (c) => !!c.escalated] };
+                 (c) => !!c.escalated,
+                 "NO CASES CURRENTLY REQUIRE HUMAN REVIEW",
+                 "Escalations land here when the policy engine refuses " +
+                 "to act without a human."],
+               closed: ["Closed cases",
+                 (c) => ["closed", "acted"].includes(c.state),
+                 "NO CLOSED CASES YET",
+                 "Resolved and executed cases will appear here."] };
   if (QT[filter]) { cases = cases.filter(QT[filter][1]);
     total = cases.length; }
   const qTitle = QT[filter] ? QT[filter][0] : "Case queue";
   main.innerHTML = `<h1>${qTitle}</h1><p class="sub">${total} cases,
-    urgent first.</p>${queueTable(cases)}`;
+    urgent first.</p>${cases.length ? queueTable(cases)
+    : `<div class="panel emptyq"><b>${QT[filter] ? QT[filter][2]
+        : "NO INVESTIGATIONS YET"}</b>
+       <p>${QT[filter] ? QT[filter][3]
+        : "Start one from the Command Center."}</p></div>`}`;
   bindRows();
 }
 async function renderMetrics() {
