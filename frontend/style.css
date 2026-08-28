@@ -610,14 +610,13 @@ border-color:var(--inadmissible);background:var(--inadmissible-bg)}
 .echain .MISSING,.echain .NEEDS{color:var(--amber);
 border-color:var(--amber);background:var(--amber-bg)}
 .echain .e{flex:0 0 12px;height:2px;background:var(--rule)}
-/* ledger as timeline */
-.ledger{border-left:2px solid var(--rule);padding-left:14px}
-.ledger>*{position:relative;opacity:0;transform:translateX(-6px);
+/* ledger entrance: animate the EXISTING entries; the original
+   .ledger::before rule line and .entry::before dots remain the ONLY
+   timeline graphics (a second overlaid dot/line system here was the
+   cause of the malformed 'scribble' shapes on the case view) */
+.ledger .entry{opacity:0;transform:translateX(-6px);
 transition:opacity .35s ease,transform .35s ease}
-.ledger.go>*{opacity:1;transform:none}
-.ledger>*::before{content:"";position:absolute;left:-21px;top:12px;
-width:8px;height:8px;border-radius:50%;
-background:var(--forest, var(--verified))}
+.ledger.go .entry{opacity:1;transform:none}
 /* AI boundary ladder */
 .dladder{display:grid;gap:0;font:10.5px var(--mono);margin:0 0 14px}
 .dladder .rung{display:flex;justify-content:space-between;
@@ -626,7 +625,7 @@ padding:6px 10px;border:1px solid var(--rule);background:var(--panel)}
 .dladder .rung.det{border-left:4px solid var(--verified)}
 .dladder .arrow{text-align:center;color:var(--ink-soft);padding:1px 0}
 /* needs-input as an operational task */
-.ask-panel h3::before,.pneeds b::before{content:"ACTION REQUIRED \\2014  ";
+.ask-panel h3::before,.pneeds b::before{content:"ACTION REQUIRED \2014  ";
 color:var(--amber)}
 /* dossier entrance/exit */
 .dossier-view{animation:dopen .28s cubic-bezier(.2,.8,.3,1)}
@@ -712,3 +711,31 @@ cursor:pointer;margin-right:10px}
 @media (prefers-reduced-motion: reduce){
   .rail{transition:none}
   .case:active,.panel:active,.exhibit:active,.stat:active{transform:none}}
+
+/* ============ P5 — intake workspace, simple rail, submit staging ==== */
+/* the investigation message box becomes a real workspace */
+.hero textarea,.workspace textarea{width:100%;min-height:340px;
+padding:18px 20px;font:15px/1.65 var(--sans);border-radius:10px;
+transition:border-color .18s ease,box-shadow .18s ease}
+.hero textarea:focus,.workspace textarea:focus{
+box-shadow:0 0 0 4px color-mix(in srgb,var(--forest) 14%,transparent)}
+.charcount{font:700 10px var(--mono);letter-spacing:.08em;
+color:var(--ink-soft);text-align:right;margin-top:4px}
+@media (max-width:900px){.hero textarea,.workspace textarea{
+min-height:240px;padding:14px}}
+/* submit staging line */
+#gostage{font:700 9.5px var(--mono);letter-spacing:.16em;
+color:var(--ink-soft);min-height:14px;margin-top:8px}
+#gostage b{color:var(--verified)}
+/* simplified rail: dots + hairline, no icon glyphs */
+nav a i{display:none}
+nav{position:relative;padding-left:6px}
+nav::before{content:"";position:absolute;left:13px;top:14px;bottom:14px;
+width:1px;background:var(--rule)}
+nav a{position:relative;padding-left:26px !important;
+font-size:12.5px;letter-spacing:.02em}
+nav a::before{content:"";position:absolute;left:10px;top:50%;
+transform:translateY(-50%);width:7px;height:7px;border-radius:50%;
+border:1.5px solid var(--ink-soft);background:var(--panel);z-index:1}
+nav a.active::before{background:var(--brass);border-color:var(--brass)}
+nav a.active::after{left:26px}

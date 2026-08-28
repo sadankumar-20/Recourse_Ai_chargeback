@@ -190,6 +190,8 @@ async function renderIntake() {
         <div class="hero-row">
           <button class="btn voice" id="mic" aria-pressed="false" hidden>\ud83c\udf99 Dictate</button>
           <button class="btn primary" id="go">\u2192&nbsp; Start investigation</button>
+        <div id="gostage" aria-live="polite"></div>
+          <div id="gostage" aria-live="polite"></div>
         </div>
         <div class="trust">
           <div><b>YOUR MESSAGE</b><span>Stored verbatim</span></div>
@@ -268,18 +270,27 @@ async function renderIntake() {
   }
   $("#go").onclick = async () => {
     $("#go").disabled = true;
+    const stage = $("#gostage");
+    const RM = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const step = (s, d) => new Promise((res) => { if (stage)
+      stage.innerHTML = s; setTimeout(res, RM ? 0 : d); });
     try {
+      await step("SUBMITTING CASE\u2026", 170);
       let text = $("#story").value;
       const ord = ($("#ordref") ? $("#ordref").value : "").trim();
       if (ord && !text.includes(ord))
         text += ` (order reference: ${ord})`;   // backend anchors from text
       const body = { text };
       if ($("#payid").value.trim()) body.payment_id = $("#payid").value.trim();
+      await step("ANALYZING \u00b7 RETRIEVING EVIDENCE\u2026", 0);
       const r = await api("/intake", { method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body) });
+      await step("VERIFYING\u2026", 170);
+      await step("<b>READY</b>", 150);
       location.hash = `#/case/${r.case_id}`;
     } catch (e) {
+      if (stage) stage.textContent = "";
       const b = e.body || {};
       $("#interp").innerHTML = `<div class="panel">
         <h3>Recourse needs a little more</h3>
