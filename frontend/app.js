@@ -24,9 +24,16 @@ async function route() {
   cleanup.forEach((f) => { try { f(); } catch (_) {} });
   cleanup = [];
   const [view, arg] = (location.hash.replace(/^#\//, "") || "intake").split("/");
+  if (window.__lastView === "cases" && view !== "cases")
+    window.__casesScroll = scrollY;
   document.querySelectorAll("nav a").forEach((a) =>
     a.classList.toggle("active", a.dataset.nav === view));
   rcReveal(document.getElementById("main"));
+  if (view === "cases" && window.__casesScroll != null) {
+    scrollTo({ top: window.__casesScroll, behavior: "auto" });
+    window.__casesScroll = null;
+  }
+  window.__lastView = view;
   main.innerHTML = "<p class='muted'>Loading\u2026</p>";
   try {
     if (view === "case" && arg) { await renderCase(arg); bindAsk(arg); }
@@ -303,7 +310,65 @@ async function renderCase(caseId) {
     api(`/cases/${caseId}`), api(`/cases/${caseId}/evidence`),
     api(`/cases/${caseId}/audit`)]);
   const [pill, pillText] = AGENT_STATES[c.state] || ["working", "investigating"];
-  main.innerHTML = `
+  const flowHit = (name) => ({
+    DISPUTE: true, ORDER: !!c.order, PAYMENT: !!c.order,
+    EVIDENCE: ev.evidence.length > 0,
+    VERIFICATION: ev.evidence.some((e) => e.verdict),
+    POLICY: !!c.decision_math, DECISION: !!c.decision,
+    EXECUTION: !!c.execution })[name];
+  const chain = ev.evidence.length ? ev.evidence.map((e) =>
+      `<span class="n ${e.verdict === "PASS" ? "VERIFIED" :
+        "INADMISSIBLE"}">${esc(e.key).slice(0, 26)}</span>`)
+      .join('<span class="e"></span>')
+    : `<span class="n MISSING">MISSING EVIDENCE</span>`;
+  const needsChip = c.needs_input
+    ? '<span class="e"></span><span class="n NEEDS">NEEDS INPUT</span>'
+    : "";
+  main.innerHTML = `<div class="dossier-view">
+    <button class="dclose" id="dclose"
+      aria-label="Close case dossier">CLOSE \u2715</button>
+    <div class="dseq" aria-hidden="true">${["CASE IDENTIFIED",
+      "LOADING RECORDS", "GATHERING EVIDENCE", "VERIFYING CLAIMS",
+      "ADMISSIBILITY CHECK", "DECISION"].map((s) =>
+      `<span>${s}</span>`).join("<i></i>")}</div>
+    <div class="dhead">
+      <div><div class="lab">CASE</div>
+        <div class="val">${esc(caseId)}</div></div>
+      <div><div class="lab">DISPUTE REASON</div>
+        <div class="val">${esc(c.reason_code)}</div></div>
+      <div><div class="lab">STATUS</div>
+        <div class="val">${esc(c.state)}</div></div>
+      <div><div class="lab">AMOUNT</div>
+        <div class="val amt">${rupee(c.amount)}</div></div>
+      <div><div class="lab">RESPOND BY</div>
+        <div class="val">${esc((c.respond_by || "").slice(0, 10))}</div>
+      </div>
+      <div><div class="lab">DECISION</div>
+        <div class="val">${esc(c.decision || "PENDING")}</div></div>
+    </div>
+    <div class="dflow" aria-label="dispute flow">${["DISPUTE", "ORDER",
+      "PAYMENT", "EVIDENCE", "VERIFICATION", "POLICY", "DECISION",
+      "EXECUTION"].map((s) => `<span class="n ${flowHit(s) ? "hit" :
+      "miss"}">${s}</span>`).join('<span class="e"></span>')}</div>
+    <div class="echain" aria-label="evidence chain">
+      <span class="n hit" style="border-color:var(--rule)">CUSTOMER
+      CLAIM</span><span class="e"></span>${chain}${needsChip}</div>
+    <div class="dladder" aria-hidden="false">
+      <div class="rung ai"><span>AI INVESTIGATES</span>
+        <span>proposes, never decides</span></div>
+      <div class="arrow">\u2193</div>
+      <div class="rung det"><span>EVIDENCE PROVES</span>
+        <span>verbatim, source-verified</span></div>
+      <div class="arrow">\u2193</div>
+      <div class="rung det"><span>POLICY DECIDES</span>
+        <span>deterministic, versioned</span></div>
+      <div class="arrow">\u2193</div>
+      <div class="rung det"><span>EXECUTION ACTS</span>
+        <span>single controlled executor</span></div>
+      <div class="arrow">\u2193</div>
+      <div class="rung det"><span>AUDIT RECORDS</span>
+        <span>tamper-evident chain</span></div>
+    </div>
     <div class="casebar">
       <a href="#/cases">\u2190</a>
       <span class="dnum">DISPUTE #${esc(c.dispute_id)}</span>

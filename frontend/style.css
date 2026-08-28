@@ -565,3 +565,75 @@ box-shadow:0 8px 20px rgba(16,24,40,.08)}
 
 /* hidden attribute must always win over author display rules */
 [hidden]{display:none !important}
+
+/* ============ P2 — investigation dossier layer ============ */
+/* opening sequence */
+.dseq{display:flex;gap:0;flex-wrap:wrap;align-items:center;
+font:700 8.5px var(--mono);letter-spacing:.14em;color:var(--ink-soft);
+margin:0 0 10px}
+.dseq span{opacity:.3;transition:opacity .22s,color .22s}
+.dseq span.lit{opacity:1;color:var(--forest, var(--verified))}
+.dseq i{width:16px;height:1px;background:var(--rule);margin:auto 8px}
+/* dossier header block */
+.dhead{display:grid;grid-template-columns:repeat(auto-fit,
+minmax(150px,1fr));gap:1px;background:var(--rule);
+border:1px solid var(--rule);margin:8px 0 12px}
+.dhead div{background:var(--panel);padding:8px 10px}
+.dhead .lab{font:700 8.5px var(--mono);letter-spacing:.18em;
+color:var(--ink-soft)}
+.dhead .val{font:700 14px var(--serif);margin-top:2px;
+overflow-wrap:anywhere}
+.dhead .val.amt{color:var(--inadmissible)}
+.dclose{float:right;font:700 11px var(--mono);cursor:pointer;
+border:1px solid var(--rule);background:var(--panel);padding:5px 12px;
+border-radius:4px}
+.dclose:hover{border-color:var(--brass)}
+.dclose:focus-visible{outline:2px solid var(--brass);outline-offset:2px}
+/* dispute flow strip */
+.dflow{display:flex;align-items:center;gap:6px;flex-wrap:wrap;
+font:700 9px var(--mono);letter-spacing:.08em;margin:0 0 14px}
+.dflow .n{border:1px solid var(--rule);background:var(--panel);
+padding:5px 9px;border-radius:4px;color:var(--ink-soft)}
+.dflow .n.hit{color:var(--verified);border-color:var(--verified);
+background:var(--verified-bg)}
+.dflow .n.miss{color:var(--amber);border-color:var(--amber);
+background:var(--amber-bg)}
+.dflow .e{flex:0 0 14px;height:2px;background:var(--rule)}
+/* evidence chain summary */
+.echain{display:flex;align-items:center;gap:6px;flex-wrap:wrap;
+font:700 9px var(--mono);letter-spacing:.06em;margin:8px 0 12px}
+.echain .n{border:1px solid var(--rule);padding:4px 8px;border-radius:4px}
+.echain .VERIFIED,.echain .PASS{color:var(--verified);
+border-color:var(--verified);background:var(--verified-bg)}
+.echain .INADMISSIBLE,.echain .FAIL{color:var(--inadmissible);
+border-color:var(--inadmissible);background:var(--inadmissible-bg)}
+.echain .MISSING,.echain .NEEDS{color:var(--amber);
+border-color:var(--amber);background:var(--amber-bg)}
+.echain .e{flex:0 0 12px;height:2px;background:var(--rule)}
+/* ledger as timeline */
+.ledger{border-left:2px solid var(--rule);padding-left:14px}
+.ledger>*{position:relative;opacity:0;transform:translateX(-6px);
+transition:opacity .35s ease,transform .35s ease}
+.ledger.go>*{opacity:1;transform:none}
+.ledger>*::before{content:"";position:absolute;left:-21px;top:12px;
+width:8px;height:8px;border-radius:50%;
+background:var(--forest, var(--verified))}
+/* AI boundary ladder */
+.dladder{display:grid;gap:0;font:10.5px var(--mono);margin:0 0 14px}
+.dladder .rung{display:flex;justify-content:space-between;
+padding:6px 10px;border:1px solid var(--rule);background:var(--panel)}
+.dladder .rung.ai{border-left:4px solid var(--amber)}
+.dladder .rung.det{border-left:4px solid var(--verified)}
+.dladder .arrow{text-align:center;color:var(--ink-soft);padding:1px 0}
+/* needs-input as an operational task */
+.ask-panel h3::before,.pneeds b::before{content:"ACTION REQUIRED \\2014  ";
+color:var(--amber)}
+/* dossier entrance/exit */
+.dossier-view{animation:dopen .28s cubic-bezier(.2,.8,.3,1)}
+@keyframes dopen{from{opacity:0;transform:translateY(12px) scale(.985)}}
+.dossier-view.closing{animation:dclosea .18s ease forwards}
+@keyframes dclosea{to{opacity:0;transform:scale(.985)}}
+@media (prefers-reduced-motion: reduce){
+ .dossier-view,.dossier-view.closing{animation:none}
+ .dseq span{opacity:1}
+ .ledger>*{opacity:1;transform:none;transition:none}}
