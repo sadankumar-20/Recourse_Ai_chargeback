@@ -26,6 +26,7 @@ async function route() {
   const [view, arg] = (location.hash.replace(/^#\//, "") || "intake").split("/");
   document.querySelectorAll("nav a").forEach((a) =>
     a.classList.toggle("active", a.dataset.nav === view));
+  rcReveal(document.getElementById("main"));
   main.innerHTML = "<p class='muted'>Loading\u2026</p>";
   try {
     if (view === "case" && arg) { await renderCase(arg); bindAsk(arg); }
@@ -60,6 +61,48 @@ async function renderLanding() {
     </div></div>`;
 }
 
+/* ---------- P1: live clock + ambience + entrance reveals ---------- */
+const RC_REDUCED = matchMedia("(prefers-reduced-motion: reduce)").matches;
+(() => {
+  const top = document.getElementById("top-status");
+  if (top && !document.getElementById("liveclock")) {
+    const c = document.createElement("span");
+    c.id = "liveclock";
+    top.prepend(c);
+    const tick = () => {
+      const n = new Date();
+      c.textContent = n.toLocaleDateString("en-GB", { day: "2-digit",
+        month: "short", year: "numeric" }).toUpperCase()
+        + " \u00b7 " + n.toLocaleTimeString("en-US", { hour: "2-digit",
+        minute: "2-digit", second: "2-digit", hour12: true });
+    };
+    tick();
+    setInterval(tick, 1000);   // topbar lives outside #main: keeps
+  }                            // ticking across views and case opens
+  if (!RC_REDUCED && !document.querySelector(".rc-sweep")) {
+    const s = document.createElement("div");
+    s.className = "rc-sweep";
+    document.body.appendChild(s);
+    for (let i = 0; i < 10; i++) {
+      const d = document.createElement("span");
+      d.className = "rc-dust";
+      d.style.left = ((i * 9.7 + 4) % 100) + "%";
+      d.style.animationDelay = -((i * 2.1) % 20) + "s";
+      document.body.appendChild(d);
+    }
+  }
+})();
+function rcReveal(scope) {
+  const els = [...(scope || document).querySelectorAll(
+    ".hero-row>*, .kpi, .card, .panel")].slice(0, 40);
+  els.forEach((el, i) => {
+    el.classList.add("rv");
+    el.style.transitionDelay = RC_REDUCED ? "0s" : `${(i % 8) * 60}ms`;
+  });
+  requestAnimationFrame(() => requestAnimationFrame(() =>
+    els.forEach((el) => el.classList.add("on"))));
+}
+
 /* ---------- intake ---------- */
 const WF = [
   ["\ud83d\udcc4", "INTAKE", "Understand what happened."],
@@ -74,8 +117,14 @@ const EXAMPLES = [
   "Customer was charged twice for pay_0042 and wants one charge reversed"];
 
 async function renderIntake() {
+  let cases = [];
+  try { cases = (await api("/cases")).cases || []; } catch (e) {}
   main.innerHTML = `<div class="cc">
     <div class="hero-wrap"><div>
+      <div class="hero-sys">RECOURSE \u00b7 SYSTEM <b>ONLINE</b>
+        \u00b7 <b>${cases.length}</b> ACTIVE DISPUTES \u00b7
+        <b>${cases.filter((c) => c.state !== "CLOSED").length}</b>
+        UNDER INVESTIGATION</div>
     <div class="kicker">Recourse \u00b7 merchant revenue recovery</div>
     <h1>Investigate before you pay.</h1>
     <p class="support">Recourse uses AI to investigate disputes, verify
