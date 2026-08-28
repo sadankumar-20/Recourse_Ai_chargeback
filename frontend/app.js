@@ -176,8 +176,21 @@ async function renderIntake() {
     <div class="hero-orn">MERCHANTS<br>KEEP COMMERCE<br>MOVING. \u2192</div>
     </div>
     <div class="wfhead">HOW RECOURSE HANDLES A DISPUTE</div>
-    <div class="wf">${WF.map(([ico, k, d], i) =>
-      `<div><span class="num">${ico}</span><b>${k}</b><span class="wfd">${d}</span></div>`).join("")}</div>
+    <div class="wstory">
+      <aside class="wnav" aria-label="Investigation stages">
+        <div class="wline"><i id="wprog"></i></div>
+        ${WF.map(([n, k], i) => `<button class="wstage" data-w="${i}"
+          aria-label="Go to stage ${n} ${k}"><s></s>${n}&nbsp;${k}
+          </button>`).join("")}
+      </aside>
+      <div class="wbeats">
+        ${WF.map(([n, k, d], i) => `<section class="wbeat" data-w="${i}">
+          <div class="wnum">${n}</div>
+          <h3 class="wtitle">${k}</h3>
+          <p class="wdesc">${d}</p>
+        </section>`).join("")}
+      </div>
+    </div>
     <div class="cc-grid">
       <div class="workspace">
         <div class="whead">Start an investigation</div>
@@ -275,6 +288,37 @@ async function renderIntake() {
       rec.start();
     };
   }
+  (() => {  // cinematic scroll story for the nine stages
+    const beats = [...main.querySelectorAll(".wbeat")];
+    const stages = [...main.querySelectorAll(".wstage")];
+    const prog = main.querySelector("#wprog");
+    if (!beats.length) return;
+    const setActive = (k) => {
+      beats.forEach((b, j) => {
+        b.classList.toggle("active", j === k);
+        b.classList.toggle("past", j < k);
+      });
+      stages.forEach((s, j) => {
+        s.classList.toggle("on", j === k);
+        s.classList.toggle("done", j < k);
+      });
+      if (prog) prog.style.height =
+        `${((k + 0.5) / beats.length) * 100}%`;
+    };
+    setActive(0);
+    const io = new IntersectionObserver((es) => es.forEach((e) => {
+      if (e.isIntersecting) setActive(+e.target.dataset.w);
+    }), { rootMargin: "-38% 0px -52% 0px" });
+    beats.forEach((b) => io.observe(b));
+    onLeave(() => io.disconnect());
+    stages.forEach((s) => s.addEventListener("click", () => {
+      const k = +s.dataset.w;
+      setActive(k);
+      beats[k].scrollIntoView({ behavior: RC_REDUCED ? "auto"
+        : "smooth", block: "center" });
+    }));
+  })();
+
   $("#go").onclick = async () => {
     $("#go").disabled = true;
     const stage = $("#gostage");
