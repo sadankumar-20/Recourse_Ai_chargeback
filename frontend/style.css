@@ -637,3 +637,21 @@ color:var(--amber)}
  .dossier-view,.dossier-view.closing{animation:none}
  .dseq span{opacity:1}
  .ledger>*{opacity:1;transform:none;transition:none}}
+
+/* ============ P3 — motion + evaluation hierarchy ============ */
+.wf>div{display:grid;grid-template-columns:auto 1fr;gap:4px 10px;
+align-items:baseline}
+.wf .wfd{grid-column:2;font:12px var(--serif);color:var(--ink-soft)}
+.evh{font:700 10.5px var(--mono);letter-spacing:.22em;color:var(--ink-soft);
+border-bottom:1px solid var(--rule);padding-bottom:6px;margin-top:26px}
+.takeaways ul{margin:6px 0 2px;padding-left:18px}
+.takeaways li{font:13.5px/1.6 var(--serif);margin:6px 0}
+.stat{transition:transform .18s ease,box-shadow .18s ease,
+border-color .18s ease}
+.stat:hover,.panel:hover{transform:translateY(-2px);
+box-shadow:0 6px 16px rgba(16,24,40,.07);border-color:var(--brass)}
+.exhibit{transition:transform .18s ease,border-color .18s ease}
+.exhibit:hover{transform:translateY(-2px);border-color:var(--brass)}
+.stat .v{font-variant-numeric:tabular-nums}
+@media (prefers-reduced-motion: reduce){
+ .stat:hover,.panel:hover,.exhibit:hover{transform:none;box-shadow:none}}

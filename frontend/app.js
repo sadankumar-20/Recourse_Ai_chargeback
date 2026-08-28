@@ -39,6 +39,8 @@ async function route() {
     if (view === "case" && arg) { await renderCase(arg); bindAsk(arg); }
     else await ({intake: renderIntake, overview: renderOverview,
                  cases: renderQueue, metrics: renderMetrics,
+                 needs: () => renderQueue("needs"),
+                 review: () => renderQueue("review"),
                  home: renderLanding}[view] || renderLanding)();
   } catch (e) { main.innerHTML = `<div class="error">${esc(e.message)}</div>`; }
   main.focus();
@@ -101,7 +103,7 @@ const RC_REDUCED = matchMedia("(prefers-reduced-motion: reduce)").matches;
 })();
 function rcReveal(scope) {
   const els = [...(scope || document).querySelectorAll(
-    ".hero-row>*, .kpi, .card, .panel")].slice(0, 40);
+    ".hero-row>*, .kpi, .card, .panel, .stat, .wf>*, .exhibit")].slice(0, 40);
   els.forEach((el, i) => {
     el.classList.add("rv");
     el.style.transitionDelay = RC_REDUCED ? "0s" : `${(i % 8) * 60}ms`;
@@ -112,11 +114,15 @@ function rcReveal(scope) {
 
 /* ---------- intake ---------- */
 const WF = [
-  ["\ud83d\udcc4", "INTAKE", "Understand what happened."],
-  ["\ud83d\udd0d", "INVESTIGATE", "Search orders, payments, shipments and policy."],
-  ["\ud83d\udee1", "VERIFY", "AI findings pass deterministic evidence verification."],
-  ["\u2696\ufe0f", "DECIDE", "Policy engine evaluates FIGHT / ACCEPT / ESCALATE."],
-  ["\ud83d\udcb0", "RECOVER", "Only the controlled executor can submit financial actions."]];
+  ["01", "DISPUTE", "First, Recourse establishes what the customer is claiming."],
+  ["02", "INVESTIGATE", "AI searches orders, payments, shipments and policy \u2014 read-only."],
+  ["03", "EVIDENCE", "Findings become exhibits with verbatim quotes and sources."],
+  ["04", "VERIFY", "Every exhibit is re-checked against the system of record."],
+  ["05", "ADMISSIBILITY", "The gate rejects anything unverified \u2014 including AI output."],
+  ["06", "POLICY", "A deterministic, versioned engine weighs the verified evidence."],
+  ["07", "DECISION", "FIGHT, ACCEPT or ESCALATE \u2014 with the math shown."],
+  ["08", "EXECUTION", "Only the single controlled executor can move money."],
+  ["09", "AUDIT", "Every step lands on a tamper-evident hash chain."]];
 const EXAMPLES = [
   "The customer says the order never arrived, but we dispatched it on time",
   "Customer disputes the payment for order #0019 and wants a refund",
@@ -140,7 +146,7 @@ async function renderIntake() {
     <div class="hero-orn">MERCHANTS<br>KEEP COMMERCE<br>MOVING. \u2192</div>
     </div>
     <div class="wf">${WF.map(([ico, k, d], i) =>
-      `<div><span class="num">${i + 1}</span><span class="ico">${ico}</span><b>${k}</b><span class="wfd">${d}</span></div>`).join("")}</div>
+      `<div><span class="num">${ico}</span><b>${k}</b><span class="wfd">${d}</span></div>`).join("")}</div>
     <div class="cc-grid">
       <div class="workspace">
         <div class="whead">Start an investigation</div>
@@ -663,10 +669,17 @@ function bindRows() {
   document.querySelectorAll("tr.row").forEach((tr) =>
     tr.addEventListener("click", () => (location.hash = `#/case/${tr.dataset.id}`)));
 }
-async function renderQueue() {
-  const { cases, total } = await api("/cases");
-  main.innerHTML = `<h1>Case queue</h1><p class="sub">${total} cases, urgent
-    first.</p>${queueTable(cases)}`;
+async function renderQueue(filter) {
+  let { cases, total } = await api("/cases");
+  const QT = { needs: ["Needs your input",
+                 (c) => c.state === "needs_input"],
+               review: ["Human review",
+                 (c) => !!c.escalated] };
+  if (QT[filter]) { cases = cases.filter(QT[filter][1]);
+    total = cases.length; }
+  const qTitle = QT[filter] ? QT[filter][0] : "Case queue";
+  main.innerHTML = `<h1>${qTitle}</h1><p class="sub">${total} cases,
+    urgent first.</p>${queueTable(cases)}`;
   bindRows();
 }
 async function renderMetrics() {
@@ -674,7 +687,10 @@ async function renderMetrics() {
   const ev = m.evaluation, r = ev.money.recourse;
   const v2 = m.v2;
   main.innerHTML = `<h1>Held-out evaluation</h1>
-    <p class="sub">40 frozen disputes, never tuned on (seed ${esc(m.config.seed)}).</p>
+    <p class="sub">40 frozen disputes, never tuned on (seed
+      ${esc(m.config.seed)}). Evaluation is evidence, not marketing \u2014
+      negative findings stay visible.</p>
+    <h2 class="evh">KEY RESULTS</h2>
     <div class="stats">
       <div class="stat"><div class="v">${(ev.decision.accuracy * 100).toFixed(1)}%</div><div class="k">decision agreement</div></div>
       <div class="stat good"><div class="v">${(ev.extraction.precision * 100).toFixed(1)}%</div><div class="k">extraction precision</div></div>
@@ -682,7 +698,7 @@ async function renderMetrics() {
       <div class="stat"><div class="v">${ev.audit.chains_valid}/${ev.audit.chains_total}</div><div class="k">chains verified</div></div>
       <div class="stat"><div class="v rupee">${rupee(r.recovered)}</div><div class="k">recovered</div></div>
       <div class="stat warn"><div class="v rupee">${rupee(r.escalated_amount_pending)}</div><div class="k">pending human action</div></div></div>
-    <h2>Where Recourse stops (priced coverage gaps)</h2>
+    <h2 class="evh">LIMITATIONS \u2014 where Recourse stops (priced coverage gaps)</h2>
     ${Object.entries(m.coverage_gaps || {}).map(([code, g]) => `<div class="panel gap">
       <h3 class="mono">${esc(code)}</h3>
       <div class="mono">${g.cases} cases \u00b7 ${rupee(g.amount_at_risk)} at risk
@@ -690,7 +706,17 @@ async function renderMetrics() {
       <div class="muted">${esc(g.needs)}</div></div>`).join("")}
     <p class="mono">zero wrong fights \u00b7 zero wrong accepts \u00b7 escalation
       precision (strict): ${esc(ev.automation.escalation_precision_strict)}</p>
-    ${!v2 ? "" : `<h2>Eval v2 \u2014 fixed vs agentic (run twice, byte-identical)</h2>
+    <h2 class="evh">ARCHITECTURAL TAKEAWAYS</h2>
+    <div class="panel takeaways"><ul>
+      <li>The admissibility gate blocks unverified evidence \u2014
+        including the AI's own output \u2014 before it can touch a
+        decision.</li>
+      <li>Escalation is a feature: money the system refuses to move
+        without a human is listed as pending, not claimed as won.</li>
+      <li>Both evaluations are frozen, seeded and reproducible; v2 was
+        run twice byte-identically.</li>
+    </ul></div>
+    ${!v2 ? "" : `<h2 class="evh">IMPORTANT FINDINGS \u2014 eval v2, fixed vs agentic (run twice, byte-identical)</h2>
     <div class="kpis">
       <div class="kpi good"><div class="v">${v2.headline.fixed_escalations_recovered_by_agent}</div>
         <div class="k">where the agent wins: escalations resolved</div></div>
