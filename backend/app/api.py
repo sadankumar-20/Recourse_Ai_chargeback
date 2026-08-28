@@ -371,6 +371,15 @@ def create_app(db_path: str | Path, data_dir: str | Path | None = None,
         except IntakeError as e:
             return err(422, str(e), missing=e.missing,
                        interpretation=e.interpretation)
+        except Exception as e:  # AI-provider/transport failure: the
+            # interpretation call itself failed BEFORE any case was
+            # created. Return structured JSON instead of an HTML 500 —
+            # nothing was changed or submitted as a decision. The
+            # exception detail stays server-side (no secrets to the UI).
+            app.logger.exception("intake interpretation unavailable")
+            return err(503, "investigation unavailable",
+                       error_type="provider_unavailable",
+                       provider_error=type(e).__name__)
         run = body.get("run", True)
         response = {"case_id": result.case.id,
                     "dispute_id": result.dispute.id,
@@ -378,10 +387,20 @@ def create_app(db_path: str | Path, data_dir: str | Path | None = None,
                     "interpretation": result.triage.to_dict(),
                     "provenance": result.dispute.provenance}
         if run:
-            cr = orchestrator("agentic").run_case(result.case.id)
-            response["state"] = cr.final_state.value
-            if cr.final_state is CaseState.NEEDS_INPUT:
-                response["needs_input"] = _latest_needs_input(result.case.id)
+            try:
+                cr = orchestrator("agentic").run_case(result.case.id)
+                response["state"] = cr.final_state.value
+                if cr.final_state is CaseState.NEEDS_INPUT:
+                    response["needs_input"] = _latest_needs_input(
+                        result.case.id)
+            except Exception:  # the case EXISTS; the engine failed.
+                # Be honest: return the created case in intake state with
+                # a warning instead of pretending nothing happened.
+                app.logger.exception("investigation engine unavailable")
+                response["state"] = "intake"
+                response["warning"] = ("investigation engine temporarily "
+                                       "unavailable — the case was "
+                                       "created and can be re-run")
         else:
             response["state"] = "intake"
         return jsonify(response), 201

@@ -300,14 +300,19 @@ async function renderIntake() {
       if (stage) stage.textContent = "";
       const b = e.body || {};
       const raw = String(e.message || "");
-      const human = /^\d+$/.test(raw)
-        ? "The investigation service hit an unexpected error \u2014 " +
-          "please try again in a moment."
-        : raw;
+      const providerDown = (b.error_type === "provider_unavailable")
+        || /^\d+$/.test(raw);
       const dup = raw.match(/dispute\s+(disp[a-z0-9_]+)\s+already has/i);
+      const title = dup ? "This dispute already has an open case"
+        : providerDown ? "INVESTIGATION UNAVAILABLE"
+        : "MORE INFORMATION NEEDED";
+      const human = providerDown
+        ? "We couldn't complete this investigation right now. Your " +
+          "request was not changed or submitted as a decision. " +
+          "Please try again."
+        : raw;
       $("#interp").innerHTML = `<div class="panel">
-        <h3>${dup ? "This dispute already has an open case"
-                  : "Recourse needs a little more"}</h3>
+        <h3>${title}</h3>
         <div>${esc(human)}</div>
         ${dup ? `<p><a class="btn primary"
           href="#/case/case_${esc(dup[1])}">Open the existing case
