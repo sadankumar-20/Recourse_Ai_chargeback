@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <!-- Recourse: the ledger-ink shield, a serif R, and the recovery
+       return-arc reclaiming the disputed amount (brass head). -->
+  <rect width="64" height="64" rx="14" fill="#101828"/>
+  <text x="32" y="41" font-family="Georgia, 'Times New Roman', serif"
+        font-size="34" font-weight="700" fill="#F5F3E7"
+        text-anchor="middle">R</text>
+  <path d="M 47 44 A 17 17 0 1 1 47 20" fill="none" stroke="#0E7B46"
+        stroke-width="4.5" stroke-linecap="round"/>
+  <path d="M 41 15 L 48.5 20.5 L 41 26" fill="none" stroke="#C9963F"
+        stroke-width="4.5" stroke-linecap="round"
+        stroke-linejoin="round"/>
+</svg>

@@ -70,6 +70,30 @@ async function renderLanding() {
     </div></div>`;
 }
 
+/* ---------- P4: mobile navigation drawer ---------- */
+(() => {
+  const btn = document.getElementById("menubtn");
+  const rail = document.querySelector(".rail");
+  const back = document.getElementById("navback");
+  if (!btn || !rail || !back) return;
+  const set = (open) => {
+    rail.classList.toggle("open", open);
+    back.hidden = !open;
+    back.classList.toggle("show", open);
+    btn.setAttribute("aria-expanded", String(open));
+    if (open) rail.querySelector("nav a").focus();
+  };
+  btn.addEventListener("click", () =>
+    set(!rail.classList.contains("open")));
+  back.addEventListener("click", () => set(false));
+  rail.querySelectorAll("nav a").forEach((a) =>
+    a.addEventListener("click", () => set(false)));
+  addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && rail.classList.contains("open"))
+      set(false);
+  });
+})();
+
 /* ---------- P1: live clock + ambience + entrance reveals ---------- */
 const RC_REDUCED = matchMedia("(prefers-reduced-motion: reduce)").matches;
 (() => {
@@ -534,13 +558,13 @@ function exhibit(e) {
 function mathPanel(c) {
   const m = c.decision_math;
   return `<div class="panel"><h3>Decision math (deterministic, versioned)</h3>
-    <table class="math">
+    <div class="tw"><table class="math">
       <tr><td>Potential recovery</td><td class="rupee">${rupee(c.amount)}</td></tr>
       <tr><td>p(win) \u00b7 playbook band</td><td>${esc(m.p_win)}</td></tr>
       <tr><td>Evidence completeness</td><td>${esc(m.completeness)}</td></tr>
       <tr><td>EV(fight)</td><td class="rupee">${rupee(m.ev_fight)}</td></tr>
       <tr><td>EV(accept)</td><td class="rupee">${rupee(m.ev_accept)}</td></tr>
-      <tr class="total"><td>Decision</td><td>${esc(m.action)}</td></tr></table>
+      <tr class="total"><td>Decision</td><td>${esc(m.action)}</td></tr></table></div>
     <div class="rule-line">rule: ${esc(m.rule_fired)} \u00b7 ${esc(m.playbook_version)} / ${esc(m.thresholds_version)}</div>
     ${(m.reasons || []).map((r) => `<div class="rule-line">\u2022 ${esc(r)}</div>`).join("")}</div>`;
 }
@@ -653,7 +677,7 @@ async function renderOverview() {
 }
 function queueTable(cases) {
   if (!cases.length) return "<p class='muted'>No cases yet \u2014 start one from New investigation.</p>";
-  return `<table><thead><tr><th>case</th><th>amount</th><th>reason</th>
+  return `<div class="tw"><table><thead><tr><th>case</th><th>amount</th><th>reason</th>
     <th>agent</th><th>deadline</th><th>status</th></tr></thead><tbody>
     ${cases.map((c) => `<tr class="row ${c.urgent ? "urgent" : ""}" data-id="${esc(c.case_id)}">
       <td class="mono">${esc(c.dispute_id)}</td>
@@ -663,7 +687,7 @@ function queueTable(cases) {
         ? '<span class="badge urgent">needs you</span>' : "investigating"}</td>
       <td class="mono">${esc(c.hours_left)}h</td>
       <td><span class="badge ${esc(c.state)}">${esc(c.state)}</span></td>
-    </tr>`).join("")}</tbody></table>`;
+    </tr>`).join("")}</tbody></table></div>`;
 }
 function bindRows() {
   document.querySelectorAll("tr.row").forEach((tr) =>
