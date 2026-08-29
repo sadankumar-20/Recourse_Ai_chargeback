@@ -139,15 +139,40 @@ function rcReveal(scope) {
 
 /* ---------- intake ---------- */
 const WF = [
-  ["01", "DISPUTE", "First, Recourse establishes what the customer is claiming."],
-  ["02", "INVESTIGATE", "AI searches orders, payments, shipments and policy \u2014 read-only."],
-  ["03", "EVIDENCE", "Findings become exhibits with verbatim quotes and sources."],
-  ["04", "VERIFY", "Every exhibit is re-checked against the system of record."],
-  ["05", "ADMISSIBILITY", "The gate rejects anything unverified \u2014 including AI output."],
-  ["06", "POLICY", "A deterministic, versioned engine weighs the verified evidence."],
-  ["07", "DECISION", "FIGHT, ACCEPT or ESCALATE \u2014 with the math shown."],
-  ["08", "EXECUTION", "Only the single controlled executor can move money."],
-  ["09", "AUDIT", "Every step lands on a tamper-evident hash chain."]];
+  ["01", "DISPUTE", "First, Recourse establishes what the customer is " +
+   "claiming. It identifies the dispute type, understands what the " +
+   "customer says went wrong, and anchors the complaint to the actual " +
+   "order or payment \\u2014 the investigation starts from a record, " +
+   "not an assumption."],
+  ["02", "INVESTIGATE", "Recourse then looks through what actually " +
+   "happened: the relevant orders, payments, shipments, tracking and " +
+   "policy records. AI helps investigate and organize \\u2014 through " +
+   "read-only tools \\u2014 but it does not make the financial " +
+   "decision."],
+  ["03", "EVIDENCE", "Useful findings become reviewable exhibits with " +
+   "verbatim quotes and their original sources, so conclusions rest on " +
+   "underlying records rather than an AI's explanation."],
+  ["04", "VERIFY", "Every exhibit is re-checked against the system of " +
+   "record. Anything that cannot be supported is not trusted \\u2014 a " +
+   "hard separation between what the investigator suggests and what " +
+   "the system can prove."],
+  ["05", "ADMISSIBILITY", "Before evidence can influence the case, it " +
+   "passes the admissibility gate. Unverified information \\u2014 " +
+   "including the AI's own output \\u2014 is blocked from the " +
+   "decision. Wrong AI output cannot become financial truth."],
+  ["06", "POLICY", "A deterministic, versioned policy engine evaluates " +
+   "the verified evidence. Decisions stay consistent, explainable and " +
+   "independent of the investigator's interpretation."],
+  ["07", "DECISION", "The verified evidence and policy result " +
+   "determine the outcome: FIGHT, ACCEPT, or ESCALATE to a human " +
+   "\\u2014 with the math shown."],
+  ["08", "EXECUTION", "Approved actions move through the single " +
+   "controlled executor, which performs only the permitted action and " +
+   "cannot change the decision \\u2014 the AI layer never touches " +
+   "money."],
+  ["09", "AUDIT", "Everything lands on a tamper-evident hash chain: " +
+   "investigation, evidence, decision, execution. The case can be " +
+   "reviewed later and the reasoning stays understandable."]];
 const EXAMPLES = [
   "Customer disputes the payment for order #0042 and says they never " +
   "received the order \u2014 please investigate whether the evidence " +
@@ -175,10 +200,14 @@ async function renderIntake() {
       financial decisions.</p></div>
     <div class="hero-orn">MERCHANTS<br>KEEP COMMERCE<br>MOVING. \u2192</div>
     </div>
+    <p class="wintro">Recourse investigates a chargeback before any money
+      moves \u2014 gathering the records, verifying the evidence, and
+      letting deterministic policy make the call. This is the path every
+      dispute takes.</p>
     <div class="wfhead">HOW RECOURSE HANDLES A DISPUTE</div>
     <div class="wstory">
       <aside class="wnav" aria-label="Investigation stages">
-        <div class="wline"><i id="wprog"></i></div>
+        <div class="wline"><i class="wprog"></i></div>
         ${WF.map(([n, k], i) => `<button class="wstage" data-w="${i}"
           aria-label="Go to stage ${n} ${k}"><s></s>${n}&nbsp;${k}
           </button>`).join("")}
@@ -290,8 +319,17 @@ async function renderIntake() {
   }
   (() => {  // cinematic scroll story for the nine stages
     const beats = [...main.querySelectorAll(".wbeat")];
-    const stages = [...main.querySelectorAll(".wstage")];
-    const prog = main.querySelector("#wprog");
+    const wsub = document.getElementById("wsub");
+    if (wsub) {
+      wsub.innerHTML = `<div class="wline"><i class="wprog"></i></div>`
+        + WF.map(([n, k], i) => `<button class="wstage" data-w="${i}"
+          aria-label="Go to stage ${n} ${k}"><s></s>${n}&nbsp;${k}
+          </button>`).join("");
+      wsub.hidden = false;
+      onLeave(() => { wsub.hidden = true; wsub.innerHTML = ""; });
+    }
+    const stages = [...document.querySelectorAll(".wstage")];
+    const progs = [...document.querySelectorAll(".wprog")];
     if (!beats.length) return;
     const setActive = (k) => {
       beats.forEach((b, j) => {
@@ -302,8 +340,8 @@ async function renderIntake() {
         s.classList.toggle("on", j === k);
         s.classList.toggle("done", j < k);
       });
-      if (prog) prog.style.height =
-        `${((k + 0.5) / beats.length) * 100}%`;
+      progs.forEach((pr) => pr.style.height =
+        `${((k + 0.5) / beats.length) * 100}%`);
     };
     setActive(0);
     const io = new IntersectionObserver((es) => es.forEach((e) => {

@@ -829,3 +829,24 @@ color:var(--ink-soft);max-width:520px;margin:0}
   .wbeat,.wbeat.past{opacity:1;transform:none;transition:none}
   .wline i{transition:none}
   .wstage,.wstage s{transition:none}}
+
+/* ============ P8 — stages nested under Command Center ============ */
+@media (min-width:901px){
+  .rail{position:sticky;top:0;height:100vh;overflow-y:auto}
+  .wstory{grid-template-columns:1fr}       /* story is the full column */
+  .wstory>.wnav{display:none}              /* in-content rail: mobile only */
+}
+.wsub{position:relative;display:flex;flex-direction:column;
+padding:2px 0 6px 34px;margin:0}
+.wsub .wline{left:24px;top:8px;bottom:8px}
+.wsub .wstage{font-size:9.5px;letter-spacing:.1em;
+padding:5px 2px 5px 12px}
+.wsub .wstage s{left:-10px;width:6px;height:6px}
+.wintro{font:15.5px/1.65 var(--serif);color:var(--ink-soft);
+max-width:560px;margin:22px 0 0}
+.wdesc{max-width:560px}
+@media (max-width:900px){
+  .wsub{display:none}                       /* drawer stays clean; the
+                                               content chip strip serves
+                                               mobile */
+}
