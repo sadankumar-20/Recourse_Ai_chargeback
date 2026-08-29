@@ -832,14 +832,17 @@ color:var(--ink-soft);max-width:520px;margin:0}
 
 /* ============ P8 — stages nested under Command Center ============ */
 @media (min-width:901px){
-  /* ROOT CAUSE of the rail scrolling away: the rail is a flex child,
-     and flex's default align-items:stretch made it exactly as tall as
-     the whole page — a full-height element has no room to stick.
-     align-self:flex-start restores a viewport-height box that sticky
-     can pin; only the rail's INTERNAL navigation scrolls if it
-     overflows. */
-  .rail{position:sticky;top:0;align-self:flex-start;
-    height:100vh;min-height:0;overflow-y:auto;overscroll-behavior:contain}
+  /* The rail is now position:fixed — the strongest guarantee that the
+     Command Center map (brand, COMMAND CENTER, all nine stages, the
+     groups and SYSTEM STATUS) stays pinned for the entire scroll, top
+     never cut off, regardless of any ancestor's overflow/transform.
+     If the navigation is taller than the viewport, only the rail's
+     INTERNAL area scrolls. The content offsets by the rail width, so
+     nothing sits underneath and no horizontal overflow is created. */
+  .rail{position:fixed;top:0;left:0;bottom:0;width:208px;
+    height:100vh;min-height:0;overflow-y:auto;
+    overscroll-behavior:contain}
+  .content{margin-left:208px}
   .wstory{grid-template-columns:1fr}       /* story is the full column */
   .wstory>.wnav{display:none}              /* in-content rail: mobile only */
 }
@@ -860,5 +863,6 @@ max-width:560px;margin:22px 0 0}
 
 @media (min-width:901px) and (max-width:1180px){
   .rail{width:184px}
+  .content{margin-left:184px}
   .rail nav a{font-size:12px}
 }

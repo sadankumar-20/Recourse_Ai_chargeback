@@ -142,33 +142,33 @@ const WF = [
   ["01", "DISPUTE", "First, Recourse establishes what the customer is " +
    "claiming. It identifies the dispute type, understands what the " +
    "customer says went wrong, and anchors the complaint to the actual " +
-   "order or payment \\u2014 the investigation starts from a record, " +
+   "order or payment — the investigation starts from a record, " +
    "not an assumption."],
   ["02", "INVESTIGATE", "Recourse then looks through what actually " +
    "happened: the relevant orders, payments, shipments, tracking and " +
-   "policy records. AI helps investigate and organize \\u2014 through " +
-   "read-only tools \\u2014 but it does not make the financial " +
+   "policy records. AI helps investigate and organize — through " +
+   "read-only tools — but it does not make the financial " +
    "decision."],
   ["03", "EVIDENCE", "Useful findings become reviewable exhibits with " +
    "verbatim quotes and their original sources, so conclusions rest on " +
    "underlying records rather than an AI's explanation."],
   ["04", "VERIFY", "Every exhibit is re-checked against the system of " +
-   "record. Anything that cannot be supported is not trusted \\u2014 a " +
+   "record. Anything that cannot be supported is not trusted — a " +
    "hard separation between what the investigator suggests and what " +
    "the system can prove."],
   ["05", "ADMISSIBILITY", "Before evidence can influence the case, it " +
-   "passes the admissibility gate. Unverified information \\u2014 " +
-   "including the AI's own output \\u2014 is blocked from the " +
+   "passes the admissibility gate. Unverified information — " +
+   "including the AI's own output — is blocked from the " +
    "decision. Wrong AI output cannot become financial truth."],
   ["06", "POLICY", "A deterministic, versioned policy engine evaluates " +
    "the verified evidence. Decisions stay consistent, explainable and " +
    "independent of the investigator's interpretation."],
   ["07", "DECISION", "The verified evidence and policy result " +
    "determine the outcome: FIGHT, ACCEPT, or ESCALATE to a human " +
-   "\\u2014 with the math shown."],
+   "— with the math shown."],
   ["08", "EXECUTION", "Approved actions move through the single " +
    "controlled executor, which performs only the permitted action and " +
-   "cannot change the decision \\u2014 the AI layer never touches " +
+   "cannot change the decision — the AI layer never touches " +
    "money."],
   ["09", "AUDIT", "Everything lands on a tamper-evident hash chain: " +
    "investigation, evidence, decision, execution. The case can be " +
