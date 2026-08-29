@@ -18,6 +18,9 @@ class TestIntakeResilience(unittest.TestCase):
             import tempfile
             app = api_mod.create_app(tempfile.mktemp(suffix=".db"))
             app.testing = True
+            # the exercised failure is EXPECTED and handled; keep the
+            # suite output clean without changing app behavior
+            app.logger.disabled = True
             c = app.test_client()
             r = c.post("/intake", json={"text":
                        "Customer says order #0100 never arrived, but we "
@@ -26,7 +29,7 @@ class TestIntakeResilience(unittest.TestCase):
             self.assertEqual(r.status_code, 503)
             self.assertEqual(r.content_type, "application/json")
             body = r.get_json()
-            self.assertEqual(body["error_type"], "provider_unavailable")
+            self.assertEqual(body["error_type"], "ai_config")
             self.assertNotIn("Traceback", r.get_data(as_text=True))
         finally:
             os.environ["RECOURSE_AI_PROVIDER"] = "stub"

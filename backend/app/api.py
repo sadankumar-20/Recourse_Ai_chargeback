@@ -376,9 +376,18 @@ def create_app(db_path: str | Path, data_dir: str | Path | None = None,
             # created. Return structured JSON instead of an HTML 500 —
             # nothing was changed or submitted as a decision. The
             # exception detail stays server-side (no secrets to the UI).
-            app.logger.exception("intake interpretation unavailable")
+            # Configuration problems (provider selected without a key)
+            # are distinguished from transient provider failures so the
+            # operator log and the UI copy can be precise; provider
+            # selection itself stays explicit — stub is the default
+            # when RECOURSE_AI_PROVIDER is unset, and anthropic is
+            # never silently downgraded (AI provenance must not lie).
+            kind = ("ai_config" if type(e).__name__ == "AIConfigError"
+                    else "provider_unavailable")
+            app.logger.exception("intake interpretation unavailable "
+                                 "(%s)", kind)
             return err(503, "investigation unavailable",
-                       error_type="provider_unavailable",
+                       error_type=kind,
                        provider_error=type(e).__name__)
         run = body.get("run", True)
         response = {"case_id": result.case.id,

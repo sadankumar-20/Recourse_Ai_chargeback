@@ -383,14 +383,14 @@ async function renderIntake() {
       const b = e.body || {};
       const raw = String(e.message || "");
       const providerDown = (b.error_type === "provider_unavailable")
-        || /^\d+$/.test(raw);
+        || (b.error_type === "ai_config") || /^\d+$/.test(raw);
       const dup = raw.match(/dispute\s+(disp[a-z0-9_]+)\s+already has/i);
       const title = dup ? "This dispute already has an open case"
         : providerDown ? "INVESTIGATION UNAVAILABLE"
         : "MORE INFORMATION NEEDED";
       const human = providerDown
-        ? "We couldn't complete this investigation right now. Your " +
-          "request was not changed or submitted as a decision. " +
+        ? "Investigation service is temporarily unavailable. Your " +
+          "request was not submitted as a financial decision. " +
           "Please try again."
         : raw;
       $("#interp").innerHTML = `<div class="panel">
