@@ -451,6 +451,22 @@ const AGENT_STATES = {
   escalated: ["stopped", "handed to a human"],
 };
 async function renderCase(caseId) {
+  try { await api(`/cases/${caseId}`); } catch (e) {
+    main.innerHTML = `<div class="panel resultp">
+      <h3>Case not available on this instance</h3>
+      <p>${esc(caseId)} was created by an investigation in another
+        serverless instance of this demo deployment, and per-instance
+        storage does not persist across requests. The investigation
+        itself ran \u2014 nothing was lost financially \u2014 but the
+        record is not retrievable here.</p>
+      <p class="mono muted">Seeded cases under Investigations are always
+        available; running locally (python api) keeps every
+        user-created case. A persistent store (e.g. Vercel Postgres) is
+        the production fix.</p>
+      <p><a class="btn" href="#/cases">\u2190 Back to
+        Investigations</a></p></div>`;
+    return;
+  }
   const [c, ev, audit] = await Promise.all([
     api(`/cases/${caseId}`), api(`/cases/${caseId}/evidence`),
     api(`/cases/${caseId}/audit`)]);
