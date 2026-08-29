@@ -1,11 +1,14 @@
 {
   "rewrites": [
-    { "source": "/(.*)", "destination": "/api/index" }
+    {
+      "source": "/(.*)",
+      "destination": "/api/index"
+    }
   ],
   "functions": {
     "api/index.py": {
       "includeFiles": "**",
-      "maxDuration": 30
+      "maxDuration": 60
     }
   }
 }

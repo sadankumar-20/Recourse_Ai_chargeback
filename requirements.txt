@@ -2,3 +2,4 @@
 # Everything else is Python 3.11+ stdlib by design (see docs/decisions.md ADR-001).
 PyYAML>=6.0        # policy/playbooks.yaml loader
 Flask>=3.0         # HTTP layer (used from the dashboard/orchestrator stages onward)
+requests>=2.31   # AI transport (backend/app/ai/client.py) — required in the deployed lambda
